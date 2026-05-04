@@ -39,7 +39,12 @@ namespace StaffGenerator.Model
         /// <summary>
         /// 番線表示
         /// </summary>
-        public string TrackText { get; set; }
+        public string TrackNumber { get; set; }
+
+        /// <summary>
+        /// 開扉表示
+        /// </summary>
+        public DoorDirection DoorDirection { get; set; }
 
         /// <summary>
         /// 備考

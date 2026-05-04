@@ -12,6 +12,8 @@ namespace StaffGenerator.Model
     public enum StopType
     {
         Stop,
+        AddStop,
+        OpStop,
         Pass
     }
 }

@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace StaffGenerator.Model
+﻿namespace StaffGenerator.Model
 {
     /// <summary>
     /// 駅描画レイアウト情報
@@ -35,5 +29,15 @@ namespace StaffGenerator.Model
         /// Xオフセット
         /// </summary>
         public int XOffset { get; set; }
+
+        /// <summary>
+        /// 到着時刻ので時間表示有無
+        /// </summary>
+        public bool IsDrawArrivalHours { get; set; }
+
+        /// <summary>
+        /// 出発時刻ので時間表示有無
+        /// </summary>
+        public bool IsDrawDepartureHours { get; set; }
     }
 }
