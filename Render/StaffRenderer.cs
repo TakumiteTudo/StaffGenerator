@@ -240,6 +240,34 @@ namespace StaffGenerator.Render
         }
 
         /// <summary>
+        /// テキスト描画モード設定
+        /// </summary>
+        /// <param name="g">Graphics</param>
+        private void SetTextRenderMode(Graphics g)
+        {
+            g.SmoothingMode = SmoothingMode.HighQuality;
+
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+
+            g.TextRenderingHint =
+                System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+        }
+
+        /// <summary>
+        /// 罫線描画モード設定
+        /// </summary>
+        /// <param name="g">Graphics</param>
+        private void SetLineRenderMode(Graphics g)
+        {
+            g.SmoothingMode = SmoothingMode.None;
+
+            g.PixelOffsetMode = PixelOffsetMode.Half;
+
+            g.TextRenderingHint =
+                System.Drawing.Text.TextRenderingHint.SingleBitPerPixelGridFit;
+        }
+
+        /// <summary>
         /// 背景描画
         /// </summary>
         /// <param name="g">Graphics</param>
@@ -249,12 +277,68 @@ namespace StaffGenerator.Render
         }
 
         /// <summary>
-        /// ヘッダ描画
+        /// 列車ヘッダ描画
         /// </summary>
         /// <param name="g">Graphics</param>
-        private void DrawHeader(Graphics g)
+        /// <param name="train">列車情報</param>
+        private void DrawTrainHeader(
+            Graphics g,
+            StaffTrain train)
         {
-            // TODO:
+            SetTextRenderMode(g);
+
+            // 列車番号
+            g.DrawString(
+                train.TrainName,
+                _fontHeader,
+                _textBrush,
+                166,
+                132);
+
+            // 種別
+            g.DrawString(
+                train.TrainType,
+                _fontHeader,
+                _textBrush,
+                166,
+                158);
+
+            // 行先
+            g.DrawString(
+                train.TrainDestination,
+                _fontHeader,
+                _textBrush,
+                166,
+                184);
+
+            // 備考
+            g.DrawString(
+                train.TrainNote,
+                _fontHeader,
+                _textBrush,
+                166,
+                210);
+
+            DrawTrainTypeImage(g, train);
+        }
+
+        private void DrawTrainTypeImage(
+            Graphics g,
+            StaffTrain train)
+        {
+            string path =
+                Path.Combine(
+                    "Image",
+                    $"スタフ種別_{train.TrainTypeImgName}.png");
+
+            if (!File.Exists(path))
+        {
+                return;
+        }
+
+            using Bitmap bmp = new Bitmap(path);
+
+            g.DrawImage(bmp, new Rectangle(332, 63, 321, 187));
         }
 
         /// <summary>
