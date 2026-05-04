@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing.Drawing2D;
+using System.Formats.Asn1;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -43,12 +44,17 @@ namespace StaffGenerator.Render
         /// <summary>
         /// 長行高さ
         /// </summary>
-        private const int ROW_HEIGHT_LARGE = 36;
+        private const int ROW_HEIGHT_LARGE = 63;
 
         /// <summary>
         /// 短行高さ
         /// </summary>
-        private const int ROW_HEIGHT_SMALL = 27;
+        private const int ROW_HEIGHT_SMALL = 36;
+
+        /// <summary>
+        /// 通過行高さ
+        /// </summary>
+        private const int ROW_HEIGHT_PASS = 27;
 
         /// <summary>
         /// 空行高さ
@@ -63,6 +69,11 @@ namespace StaffGenerator.Render
         /// テンプレート画像
         /// </summary>
         private readonly Bitmap _templateBitmap;
+
+        /// <summary>
+        /// ヘッダフォント
+        /// </summary>
+        private readonly Font _fontHeader;
 
         /// <summary>
         /// 駅名フォント
@@ -111,6 +122,7 @@ namespace StaffGenerator.Render
         {
             _templateBitmap = new Bitmap(templatePath);
 
+            _fontHeader = new Font("Yu Gothic", 12, FontStyle.Bold);
             _fontStation = new Font("Yu Gothic", 18, FontStyle.Bold);
             _fontPass = new Font("Yu Gothic", 14, FontStyle.Bold);
             _fontTime = new Font("Yu Gothic", 18, FontStyle.Bold);
@@ -130,7 +142,7 @@ namespace StaffGenerator.Render
         /// </summary>
         /// <param name="stations">駅リスト</param>
         /// <returns>描画済みBitmap</returns>
-        public Bitmap Render(IReadOnlyList<StaffStation> stations)
+        public Bitmap Render(StaffTrain train)
         {
             // テンプレート複製
             Bitmap bmp = new Bitmap(_templateBitmap);
@@ -139,24 +151,22 @@ namespace StaffGenerator.Render
 
             InitializeGraphics(g);
 
-            // レイアウト計算
-            List<StaffStationLayout> layouts = Measure(stations);
+            List<StaffStationLayout> layouts =
+                Measure(train.StaffStations);
 
             // 背景描画
             DrawBackground(g);
 
-            // ヘッダ描画
-            DrawHeader(g);
+            DrawTrainHeader(g, train);
 
-            // 駅描画
-            for (int i = 0; i < stations.Count; i++)
+            for (int i = 0; i < train.StaffStations.Count; i++)
             {
                 DrawStation(
                     g,
-                    stations[i],
+                    train.StaffStations[i],
                     layouts[i],
                     i,
-                    stations.Count);
+                    train.StaffStations.Count);
             }
 
             // フッタ描画
@@ -384,8 +394,28 @@ namespace StaffGenerator.Render
         /// <returns>行高さ</returns>
         private int GetRowHeight(StaffStation station)
         {
+            // Todo: 備考による上限超え対応
+
             if (station.StopType == StopType.Pass)
             {
+                return ROW_HEIGHT_PASS;
+            }
+
+            if (station.ArrivalTime == null || station.DepartureTime == null)
+            {
+                //始点・終点等時刻1つ
+                if (station.IsShunting)
+                {
+                    //入換ありは2行
+                    return ROW_HEIGHT_LARGE;
+                }
+
+                //基本1行
+                return ROW_HEIGHT_SMALL;
+            }
+            if (station.IsTimingPoint = false)
+            {
+                //非採時は1行
                 return ROW_HEIGHT_SMALL;
             }
 
