@@ -64,6 +64,7 @@ namespace StaffGenerator.Parser
                 TrainTypeImgName = src.trainClass ?? "",
                 TrainDestination = src.destinationStationName ?? "",
                 TrainNote = "",
+                IsDownward = isDownward,   // 追加
                 StaffStations = mergedList
                     .Select(s => ConvertStation(s, master, isDownward))
                     .ToList()
@@ -139,6 +140,7 @@ namespace StaffGenerator.Parser
 
             return new StaffStation
             {
+                StationID = sta.stationID,   // 追加
                 DisplayName = master.ResolveDisplayName(sta.stationID, sta.stationName ?? ""),
                 ArrivalTime = arr,
                 DepartureTime = dep,
@@ -159,15 +161,6 @@ namespace StaffGenerator.Parser
         {
             if (t == null || t.h < 0) return null;
             return new TimeSpan(t.h, t.m, t.s);
-        }
-
-        /// <summary>
-        /// 着発時刻の有無からStopTypeを推定する
-        /// 両方nullなら通過、片方でも有効なら停車
-        /// </summary>
-        private static StopType ResolveStopType(TimeSpan? arr, TimeSpan? dep)
-        {
-            return (arr == null && dep == null) ? StopType.Pass : StopType.Stop;
         }
     }
 }
