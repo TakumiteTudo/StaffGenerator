@@ -520,10 +520,10 @@ namespace StaffGenerator.Render
             //
             // 到着時刻描画
             //
-            if (station.ArrivalTime.HasValue && station.IsTimingPoint)
+            if (station.StopType != StopType.Pass && station.ArrivalTime.HasValue && station.IsTimingPoint)
             {
                 bool isLarge =
-                    station.StopType != StopType.Pass && !station.DepartureTime.HasValue;
+                    !station.DepartureTime.HasValue;
 
                 int offsetY = isLarge ? 0 : -4;
 
@@ -633,11 +633,11 @@ namespace StaffGenerator.Render
             //開扉方向   
             if (trackText != "")
             {
-                if (station.DoorDirection == DoorDirection.Left)
+                if (station.DoorDirection == DoorDirection.Left && station.StopType == StopType.Stop)
                 {
                     trackText = "◀" + trackText;
                 }
-                else if (station.DoorDirection == DoorDirection.Right)
+                else if (station.DoorDirection == DoorDirection.Right && station.StopType == StopType.Stop)
                 {
                     trackText = "　" + trackText + "▶";
                 }
@@ -818,6 +818,14 @@ namespace StaffGenerator.Render
             if (!int.TryParse(text, out int number))
             {
                 return text;
+            }
+
+            //
+            // 0
+            //
+            if (number == 0)
+            {
+                return "";
             }
 
             //
