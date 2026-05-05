@@ -12,6 +12,11 @@ namespace StaffGenerator.Model
     public class StaffStation
     {
         /// <summary>
+        /// 駅ID（スタフ備考生成に使用）
+        /// </summary>
+        public string StationID { get; set; } = "";
+
+        /// <summary>
         /// 表示駅名
         /// </summary>
         public string DisplayName { get; set; }
