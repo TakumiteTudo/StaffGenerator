@@ -1,0 +1,264 @@
+﻿[
+  {
+    "stationID": "TH76",
+    "displayName": "館浜",
+    "trackDoorDirections": {
+      "1": {
+        "kudari": "Left",
+        "nobori": "Right"
+      },
+      "2": {
+        "kudari": "Right",
+        "nobori": "Right"
+      },
+      "3": {
+        "kudari": "Right",
+        "nobori": "Left"
+      },
+      "4": {
+        "kudari": "Left",
+        "nobori": "Right"
+      }
+    }
+  },
+  {
+    "stationID": "TH75",
+    "displayName": "駒野",
+    "trackDoorDirections": {
+      "1": {
+        "kudari": "Left",
+        "nobori": "Right"
+      },
+      "2": {
+        "kudari": "Right",
+        "nobori": "Left"
+      },
+      "3": {
+        "kudari": "Left",
+        "nobori": "Right"
+      },
+      "4": {
+        "kudari": "Right",
+        "nobori": "Left"
+      }
+    }
+  },
+  {
+    "stationID": "TH71",
+    "displayName": "津崎",
+    "trackDoorDirections": {
+      "1": {
+        "kudari": "Left",
+        "nobori": "Right"
+      },
+      "2": {
+        "kudari": "Right",
+        "nobori": "Left"
+      },
+      "3": {
+        "kudari": "Left",
+        "nobori": "Right"
+      },
+      "4": {
+        "kudari": "Right",
+        "nobori": "Left"
+      }
+    }
+  },
+  {
+    "stationID": "TH67",
+    "displayName": "新野崎",
+    "trackDoorDirections": {
+      "1": {
+        "kudari": "Left",
+        "nobori": "Right"
+      },
+      "2": {
+        "kudari": "Right",
+        "nobori": "Left"
+      },
+      "3": {
+        "kudari": "Left",
+        "nobori": "Right"
+      },
+      "4": {
+        "kudari": "Right",
+        "nobori": "Left"
+      }
+    }
+  },
+  {
+    "stationID": "TH65",
+    "displayName": "大道寺",
+    "trackDoorDirections": {
+      "1": {
+        "kudari": "Left",
+        "nobori": "Right"
+      },
+      "2": {
+        "kudari": "Right",
+        "nobori": "Left"
+      },
+      "3": {
+        "kudari": "Left",
+        "nobori": "Right"
+      },
+      "4": {
+        "kudari": "Right",
+        "nobori": "Left"
+      }
+    }
+  },
+  {
+    "stationID": "TH46",
+    "displayName": "新大路",
+    "trackDoorDirections": {
+      "1": {
+        "kudari": "Left",
+        "nobori": "Right"
+      },
+      "2": {
+        "kudari": "Right",
+        "nobori": "Left"
+      },
+      "3": {
+        "kudari": "Left",
+        "nobori": "Right"
+      },
+      "4": {
+        "kudari": "Right",
+        "nobori": "Left"
+      }
+    }
+  },
+  {
+    "stationID": "TH64",
+    "displayName": "藤江",
+    "trackDoorDirections": {
+      "1": {
+        "kudari": "Left",
+        "nobori": "Right"
+      },
+      "2": {
+        "kudari": "Right",
+        "nobori": "Left"
+      }
+    }
+  },
+  {
+    "stationID": "TH62",
+    "displayName": "高見沢",
+    "trackDoorDirections": {
+      "1": {
+        "kudari": "Left",
+        "nobori": "Right"
+      },
+      "2": {
+        "kudari": "Right",
+        "nobori": "Left"
+      }
+    }
+  },
+  {
+    "stationID": "TH54",
+    "displayName": "上吉沢",
+    "trackDoorDirections": {
+      "1": {
+        "kudari": "Left",
+        "nobori": "Right"
+      },
+      "2": {
+        "kudari": "Right",
+        "nobori": "Left"
+      }
+    }
+  },
+  {
+    "stationID": "TH53",
+    "displayName": "下吉沢",
+    "trackDoorDirections": {
+      "1": {
+        "kudari": "Left",
+        "nobori": "Right"
+      },
+      "2": {
+        "kudari": "Right",
+        "nobori": "Left"
+      }
+    }
+  },
+  {
+    "stationID": "TH52",
+    "displayName": "名田",
+    "trackDoorDirections": {
+      "1": {
+        "kudari": "Left",
+        "nobori": "Right"
+      },
+      "2": {
+        "kudari": "Right",
+        "nobori": "Left"
+      }
+    }
+  },
+  {
+    "stationID": "TH63",
+    "displayName": "水越",
+    "trackDoorDirections": {
+      "1": {
+        "kudari": "Right",
+        "nobori": "Left"
+      },
+      "2": {
+        "kudari": "Left",
+        "nobori": "Right"
+      }
+    }
+  },
+  {
+    "stationID": "TH51",
+    "displayName": "三石",
+    "trackDoorDirections": {
+      "1": {
+        "kudari": "Right",
+        "nobori": "Left"
+      },
+      "2": {
+        "kudari": "Left",
+        "nobori": "Right"
+      }
+    }
+  },
+  {
+    "stationID": "TH61",
+    "displayName": "日野森",
+    "trackDoorDirections": {
+      "1": {
+        "kudari": "Left",
+        "nobori": "Right"
+      },
+      "2": {
+        "kudari": "Right",
+        "nobori": "Left"
+      },
+      "3": {
+        "kudari": "Left",
+        "nobori": "Right"
+      }
+    }
+  },
+  {
+    "stationID": "TH58",
+    "displayName": "赤山町",
+    "trackDoorDirections": {
+      "1": {
+        "kudari": "Right",
+        "nobori": "Left"
+      },
+      "3": {
+        "kudari": "Left",
+        "nobori": "Right"
+      }
+    }
+  }
+]
