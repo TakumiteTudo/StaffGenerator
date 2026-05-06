@@ -31,12 +31,22 @@
         public int XOffset { get; set; }
 
         /// <summary>
-        /// 到着時刻ので時間表示有無
+        /// 到着時刻の表示有無
+        /// </summary>
+        public bool IsDrawArrival { get; set; }
+
+        /// <summary>
+        /// 到着時刻での時間表示有無
         /// </summary>
         public bool IsDrawArrivalHours { get; set; }
 
         /// <summary>
-        /// 出発時刻ので時間表示有無
+        /// 到着時刻の表示有無
+        /// </summary>
+        public bool IsDrawDeparture { get; set; }
+
+        /// <summary>
+        /// 出発時刻での時間表示有無
         /// </summary>
         public bool IsDrawDepartureHours { get; set; }
     }

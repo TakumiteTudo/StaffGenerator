@@ -8,10 +8,11 @@ namespace StaffGenerator.Parser
     public static class StaffNoteGenerator
     {
         /// <summary>交換の時間ウィンドウ（分）</summary>
-        private const int CrossingWindowMinutes = 5;
+        private const int CrossingWindowMinutes = 10;
 
-        /// <summary>接続の最大時間差（分）</summary>
-        private const int ConnectionMaxMinutes = 30;
+        /// <summary>接続の最大時間差（分）</summary>        
+        private const int GeneralConnectionMaxMinutes = 30;
+        private const int ExpressConnectionMaxMinutes = 30;
 
         /// <summary>着発時刻のどちらを使うかの指定</summary>
         private enum TimeType
@@ -47,6 +48,13 @@ namespace StaffGenerator.Parser
             StaffTrain WaitingTrain, StaffStation WaitingStation,
             StaffTrain PassingTrain, StaffStation PassingStation);
 
+        private record PassCoverPair(
+            StaffTrain SelfTrain,
+            StaffStation SelfStation,
+            StaffTrain CoveringTrain,
+            StaffStation CoveringStation);
+
+
         // ─────────────────────────────
         // 公開メソッド
         // ─────────────────────────────
@@ -63,17 +71,19 @@ namespace StaffGenerator.Parser
             var idx = BuildIndex(trains);
             var notes = new List<PendingNote>();
 
-            // 交換
             foreach (var train in trains)
                 CollectCrossingNotes(train, idx, abbrTable, routeConfig, notes);
 
-            // 接続・連絡・待避
-            CollectGeneralConnectionNotes(ExtractGeneralConnectionPairs(trains, idx), abbrTable, notes);
-            CollectToExpressNotes(ExtractToExpressPairs(trains, idx), abbrTable, notes);
-            CollectFromExpressNotes(ExtractFromExpressPairs(trains, idx), abbrTable, notes);
-            CollectOvertakeNotes(ExtractOvertakePairs(trains, idx), abbrTable, notes);
+            var generalPairs = ExtractGeneralConnectionPairs(trains, idx);
+            var toExpress = ExtractToExpressPairs(trains, idx);
+            var fromExpress = ExtractFromExpressPairs(trains, idx);
+            var overtakePairs = ExtractOvertakePairs(trains, idx);
 
-            // 駅ごとに時刻順でまとめてAppend
+            CollectGeneralConnectionNotes(generalPairs, abbrTable, notes);
+            CollectToExpressNotes(toExpress, abbrTable, notes);
+            CollectFromExpressNotes(fromExpress, abbrTable, notes);
+            CollectOvertakeNotes(overtakePairs, abbrTable, notes);
+
             foreach (var group in notes.GroupBy(n => n.Station))
                 AppendNote(group.Key, group.OrderBy(n => n.Time).Select(n => n.Note));
         }
@@ -110,7 +120,7 @@ namespace StaffGenerator.Parser
                         if (e.Train.TrainDestination == self.TrainDestination) continue;     // ②
                         if (e.Station.DepartureTime is not TimeSpan otherDep) continue;
                         if (otherDep <= selfArr) continue;
-                        if ((otherDep - selfArr).TotalMinutes > ConnectionMaxMinutes) continue;
+                        if ((otherDep - selfArr).TotalMinutes > GeneralConnectionMaxMinutes) continue;
 
                         candidates.Add(new GeneralConnectionPair(self, sta, e.Train, e.Station));
                     }
@@ -122,7 +132,7 @@ namespace StaffGenerator.Parser
                 .Select(g => g.OrderByDescending(p => p.ArrivalStation.ArrivalTime).First())
                 .ToList();
 
-            return ApplyMultiDepartureFilter(filtered); // ③
+            return ApplyMultiDepartureFilter(filtered, idx);
         }
 
         private static List<ToExpressPair> ExtractToExpressPairs(
@@ -155,6 +165,7 @@ namespace StaffGenerator.Parser
                         if (e.Station.ArrivalTime is not TimeSpan otherArr) continue;
                         if (prevExpressArr.HasValue && otherArr <= prevExpressArr.Value) continue;
                         if (otherArr >= expressDep) continue;
+                        if ((expressDep - otherArr).TotalMinutes > ExpressConnectionMaxMinutes) continue;
 
                         result.Add(new ToExpressPair(e.Train, e.Station, express, sta));
                     }
@@ -322,7 +333,10 @@ namespace StaffGenerator.Parser
                 if (depInfo is not null && p.DepartureStation.DepartureTime is TimeSpan depTime)
                     notes.Add(new PendingNote(p.ArrivalStation, depTime, $"{prefix}{depInfo}"));
 
-                // 後列車（出発側）：相手の着時刻を記載
+                // 後列車（出発側）：連絡の場合は営業始発駅のみ記載
+                if (prefix == "(連)" && !IsFirstStopStation(p.DepartureTrain, p.DepartureStation))
+                    continue;
+
                 var arrInfo = FormatOtherTrainInfo(p.ArrivalTrain, p.ArrivalStation, TimeType.Arrival, abbr);
                 if (arrInfo is not null && p.ArrivalStation.ArrivalTime is TimeSpan arrTime)
                     notes.Add(new PendingNote(p.DepartureStation, arrTime, $"{prefix}{arrInfo}"));
@@ -336,12 +350,14 @@ namespace StaffGenerator.Parser
         {
             foreach (var p in pairs)
             {
+                // 一般列車の営業始発駅では記載しない
+                if (IsFirstStopStation(p.IncomingTrain, p.IncomingStation)) continue;
+
                 var prefix = ConnectionPrefix(p.IncomingStation, p.ExpressStation);
                 var depInfo = FormatOtherTrainInfo(p.ExpressTrain, p.ExpressStation, TimeType.Departure, abbr);
                 if (depInfo is null) continue;
                 if (p.ExpressStation.DepartureTime is not TimeSpan depTime) continue;
 
-                // 一般列車側のみ記載
                 notes.Add(new PendingNote(p.IncomingStation, depTime, $"{prefix}{depInfo}"));
             }
         }
@@ -455,7 +471,8 @@ namespace StaffGenerator.Parser
         /// 同一到着から複数出発がある場合、先発列車が止まらない駅に停車する列車のみ残す
         /// </summary>
         private static List<GeneralConnectionPair> ApplyMultiDepartureFilter(
-            List<GeneralConnectionPair> pairs)
+    List<GeneralConnectionPair> pairs,
+    Dictionary<string, List<StationEntry>> idx)
         {
             var toRemove = new HashSet<GeneralConnectionPair>(ReferenceEqualityComparer.Instance);
 
@@ -466,19 +483,68 @@ namespace StaffGenerator.Parser
             foreach (var group in groups)
             {
                 var sorted = group.OrderBy(p => p.DepartureStation.DepartureTime).ToList();
-                var firstStops = GetStopsAfter(sorted[0].DepartureTrain, sorted[0].DepartureStation.StationID);
 
                 for (int i = 1; i < sorted.Count; i++)
                 {
-                    var otherStops = GetStopsAfter(sorted[i].DepartureTrain, sorted[i].DepartureStation.StationID);
+                    var other = sorted[i];
+                    var otherStops = GetStopsAfter(other.DepartureTrain, other.DepartureStation.StationID);
 
-                    // 先発が止まらない駅に停車しないなら不要
-                    if (!otherStops.Any(s => !firstStops.Contains(s)))
-                        toRemove.Add(sorted[i]);
+                    // 先発列車の有効停車駅（接続先を含む）を計算
+                    var firstStops = GetEffectiveStopsAfterWithConnections(
+                        sorted[0].DepartureTrain,
+                        sorted[0].DepartureStation.StationID,
+                        pairs,
+                        otherStops);
+
+                    if (otherStops.All(s => firstStops.Contains(s)))
+                        toRemove.Add(other);
                 }
             }
 
             return pairs.Where(p => !toRemove.Contains(p)).ToList();
+        }
+
+        /// <summary>
+        /// 先発列車の有効停車駅セットを返す
+        /// 先発列車が通過する駅Xについて、比較列車がXに来ない場合かつ
+        /// 接続列車CがXをカバーするなら、Cの停車駅を先発列車の網羅範囲に追加する
+        /// </summary>
+        private static HashSet<string> GetEffectiveStopsAfterWithConnections(
+            StaffTrain train,
+            string fromStationID,
+            List<GeneralConnectionPair> pairs,
+            HashSet<string> otherStops)
+        {
+            var result = GetStopsAfter(train, fromStationID);
+
+            // trainの接続先列車を取得
+            var connectionEntries = pairs
+                .Where(p => p.ArrivalTrain == train)
+                .Select(p => (p.DepartureTrain, p.DepartureStation.StationID))
+                .ToList();
+
+            bool found = false;
+            foreach (var sta in train.StaffStations)
+            {
+                if (sta.StationID == fromStationID) { found = true; continue; }
+                if (!found) continue;
+                if (sta.StopType != StopType.Pass) continue;
+                if (sta.StationID.EndsWith("S")) continue;
+
+                // 比較列車がこの通過駅に来る場合はスキップ
+                if (otherStops.Contains(sta.StationID)) continue;
+
+                // 接続列車がこの通過駅をカバーするか
+                foreach (var (connTrain, connFromID) in connectionEntries)
+                {
+                    var connStops = GetStopsAfter(connTrain, connFromID);
+                    if (!connStops.Contains(sta.StationID)) continue;
+                    foreach (var s in connStops) result.Add(s);
+                    break;
+                }
+            }
+
+            return result;
         }
 
 
@@ -497,6 +563,15 @@ namespace StaffGenerator.Parser
                     found = true;
             }
             return result;
+        }
+
+        /// <summary>
+        /// 指定駅が列車の営業始発駅（StopType.Stopの初エントリ）かどうかを返す
+        /// </summary>
+        private static bool IsFirstStopStation(StaffTrain train, StaffStation station)
+        {
+            var first = train.StaffStations.FirstOrDefault(s => s.StopType == StopType.Stop);
+            return first == station;
         }
 
         /// <summary>

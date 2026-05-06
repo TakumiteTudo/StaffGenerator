@@ -61,7 +61,7 @@ namespace StaffGenerator.Render
         /// <summary>
         /// 空行高さ
         /// </summary>
-        private const int ROW_HEIGHT_EMPTY = 15;
+        private const int ROW_HEIGHT_EMPTY = 5;
 
         #endregion
 
@@ -245,15 +245,23 @@ namespace StaffGenerator.Render
                 //
                 // 到着時刻
                 //
-                if (station.ArrivalTime.HasValue && station.IsTimingPoint)
+                if (station.ArrivalTime.HasValue && station.IsTimingPoint && station.StopType != StopType.Pass)
                 {
-                    int hour = station.ArrivalTime.Value.Hours;
-
-                    if (lastHour != hour)
+                    if ((i == 0) && !station.IsShunting)
                     {
-                        layout.IsDrawArrivalHours = true;
+                        layout.IsDrawArrival = false;
+                    }
+                    else
+                    {
+                        layout.IsDrawArrival = true;
+                        int hour = station.ArrivalTime.Value.Hours;
 
-                        lastHour = hour;
+                        if (lastHour != hour)
+                        {
+                            layout.IsDrawArrivalHours = true;
+
+                            lastHour = hour;
+                        }
                     }
                 }
 
@@ -262,13 +270,21 @@ namespace StaffGenerator.Render
                 //
                 if (station.DepartureTime.HasValue)
                 {
-                    int hour = station.DepartureTime.Value.Hours;
-
-                    if (lastHour != hour)
+                    if ((i == stations.Count - 1) && !station.IsShunting)
                     {
-                        layout.IsDrawDepartureHours = true;
+                        layout.IsDrawDeparture = false;
+                    }
+                    else
+                    {
+                        layout.IsDrawDeparture = true;
+                        int hour = station.DepartureTime.Value.Hours;
 
-                        lastHour = hour;
+                        if (lastHour != hour)
+                        {
+                            layout.IsDrawDepartureHours = true;
+
+                            lastHour = hour;
+                        }
                     }
                 }
 
@@ -529,7 +545,7 @@ namespace StaffGenerator.Render
             //
             // 到着時刻描画
             //
-            if (station.StopType != StopType.Pass && station.ArrivalTime.HasValue && station.IsTimingPoint)
+            if (layout.IsDrawArrival)
             {
                 bool isLarge =
                     !station.DepartureTime.HasValue;
@@ -551,7 +567,7 @@ namespace StaffGenerator.Render
             //
             // 出発時刻描画
             //
-            if (station.DepartureTime.HasValue)
+            if (layout.IsDrawDeparture)
             {
                 bool isLarge =
                     station.StopType != StopType.Pass;
@@ -809,7 +825,13 @@ namespace StaffGenerator.Render
             {
                 return 0;
             }
-            int r = 24;
+
+            int r = 0;
+
+            if (station.TrackNumber != "0")
+            {
+                r += 24;
+            }
 
             if (station.Note == "")
             {
