@@ -1,6 +1,4 @@
 ﻿using StaffGenerator.Model;
-using System.CodeDom;
-using System.Diagnostics;
 
 namespace StaffGenerator.Parser
 {
@@ -9,13 +7,53 @@ namespace StaffGenerator.Parser
     /// </summary>
     public static class StaffNoteGenerator
     {
-        private record StationEntry(StaffTrain Train, StaffStation Station, int StaIndex);
+        /// <summary>交換の時間ウィンドウ（分）</summary>
+        private const int CrossingWindowMinutes = 5;
 
-        private static TimeSpan MAX_KOUKAN_MINUTE = TimeSpan.FromMinutes(5);
+        /// <summary>接続の最大時間差（分）</summary>
+        private const int ConnectionMaxMinutes = 30;
+
+        /// <summary>着発時刻のどちらを使うかの指定</summary>
+        private enum TimeType
+        {
+            /// <summary>到着時刻（着）</summary>
+            Arrival,
+            /// <summary>出発時刻（発）</summary>
+            Departure,
+            /// <summary>通過時刻（通）※到着→出発の順でnullでない方を使用</summary>
+            Pass
+        }
+
+        private record StationEntry(StaffTrain Train, StaffStation Station, int StaIndex);
+        private record PendingNote(StaffStation Station, TimeSpan Time, string Note);
+
+        /// <summary>一般接続ペア</summary>
+        private record GeneralConnectionPair(
+            StaffTrain ArrivalTrain, StaffStation ArrivalStation,
+            StaffTrain DepartureTrain, StaffStation DepartureStation);
+
+        /// <summary>特急へ接続ペア</summary>
+        private record ToExpressPair(
+            StaffTrain IncomingTrain, StaffStation IncomingStation,
+            StaffTrain ExpressTrain, StaffStation ExpressStation);
+
+        /// <summary>特急から接続ペア</summary>
+        private record FromExpressPair(
+            StaffTrain ExpressTrain, StaffStation ExpressStation,
+            StaffTrain OutgoingTrain, StaffStation OutgoingStation);
+
+        /// <summary>待避ペア</summary>
+        private record OvertakePair(
+            StaffTrain WaitingTrain, StaffStation WaitingStation,
+            StaffTrain PassingTrain, StaffStation PassingStation);
+
+        // ─────────────────────────────
+        // 公開メソッド
+        // ─────────────────────────────
 
         /// <summary>
         /// 全列車にスタフ備考を付加する
-        /// 既存備考がある場合は\n区切りで末尾に連結する
+        /// 全種別の備考を収集したうえで時刻順にまとめて付加する
         /// </summary>
         public static void Apply(
             List<StaffTrain> trains,
@@ -23,74 +61,379 @@ namespace StaffGenerator.Parser
             RouteConfig routeConfig)
         {
             var idx = BuildIndex(trains);
-            foreach (var selftrain in trains)
+            var notes = new List<PendingNote>();
+
+            // 交換
+            foreach (var train in trains)
+                CollectCrossingNotes(train, idx, abbrTable, routeConfig, notes);
+
+            // 接続・連絡・待避
+            CollectGeneralConnectionNotes(ExtractGeneralConnectionPairs(trains, idx), abbrTable, notes);
+            CollectToExpressNotes(ExtractToExpressPairs(trains, idx), abbrTable, notes);
+            CollectFromExpressNotes(ExtractFromExpressPairs(trains, idx), abbrTable, notes);
+            CollectOvertakeNotes(ExtractOvertakePairs(trains, idx), abbrTable, notes);
+
+            // 駅ごとに時刻順でまとめてAppend
+            foreach (var group in notes.GroupBy(n => n.Station))
+                AppendNote(group.Key, group.OrderBy(n => n.Time).Select(n => n.Note));
+        }
+
+        // ─────────────────────────────
+        // ペア抽出
+        // ─────────────────────────────
+
+        private static List<GeneralConnectionPair> ExtractGeneralConnectionPairs(
+            List<StaffTrain> trains,
+            Dictionary<string, List<StationEntry>> idx)
+        {
+            var candidates = new List<GeneralConnectionPair>();
+
+            foreach (var self in trains)
             {
-                foreach (var othertrain in trains)
+                if (IsExpress(self)) continue;
+                if (IsDeadheadOrTest(self)) continue; // ①
+
+                foreach (var sta in self.StaffStations)
                 {
-                    if (selftrain == othertrain) continue;
+                    if (sta.DisplayName != self.TrainDestination) continue;
+                    if (sta.StopType == StopType.Pass) continue;
+                    if (sta.ArrivalTime is not TimeSpan selfArr) continue;
 
-                    //運転時間が被っていない場合は交換は起こらない
-                    if (
-                        selftrain.StaffStations[0].DepartureTime - MAX_KOUKAN_MINUTE < othertrain.StaffStations[othertrain.StaffStations.Count - 1].ArrivalTime
-                        &&
-                        othertrain.StaffStations[0].DepartureTime < selftrain.StaffStations[selftrain.StaffStations.Count - 1].ArrivalTime
-                        )
+                    if (!idx.TryGetValue(sta.StationID, out var entries)) continue;
+
+                    foreach (var e in entries)
                     {
-                        Debug.WriteLine($"☆{selftrain.TrainName}/{othertrain.TrainName}");
+                        if (e.Train == self) continue;
+                        if (e.Train.IsDownward != self.IsDownward) continue;
+                        if (e.Station.StopType == StopType.Pass) continue;
+                        if (IsDeadheadOrTest(e.Train)) continue;                             // ①
+                        if (e.Train.TrainDestination == self.TrainDestination) continue;     // ②
+                        if (e.Station.DepartureTime is not TimeSpan otherDep) continue;
+                        if (otherDep <= selfArr) continue;
+                        if ((otherDep - selfArr).TotalMinutes > ConnectionMaxMinutes) continue;
 
+                        candidates.Add(new GeneralConnectionPair(self, sta, e.Train, e.Station));
                     }
                 }
             }
+
+            var filtered = candidates
+                .GroupBy(p => (p.DepartureTrain, p.DepartureStation.StationID))
+                .Select(g => g.OrderByDescending(p => p.ArrivalStation.ArrivalTime).First())
+                .ToList();
+
+            return ApplyMultiDepartureFilter(filtered); // ③
+        }
+
+        private static List<ToExpressPair> ExtractToExpressPairs(
+    List<StaffTrain> trains,
+    Dictionary<string, List<StationEntry>> idx)
+        {
+            var result = new List<ToExpressPair>();
+
+            foreach (var express in trains.Where(IsExpress))
+            {
+                var stas = express.StaffStations;
+                for (int i = 0; i < stas.Count; i++)
+                {
+                    var sta = stas[i];
+                    if (i == 0 || i == stas.Count - 1) continue;
+                    if (sta.StopType == StopType.Pass) continue;
+                    if (sta.DepartureTime is not TimeSpan expressDep) continue;
+
+                    var prevExpressArr = GetPrevExpressArrival(express, sta, idx);
+
+                    if (!idx.TryGetValue(sta.StationID, out var entries)) continue;
+
+                    foreach (var e in entries)
+                    {
+                        if (e.Train == express) continue;
+                        if (e.Train.IsDownward != express.IsDownward) continue;
+                        if (e.Station.StopType == StopType.Pass) continue;
+                        if (IsDeadheadOrTest(e.Train)) continue;                             // ①
+                        if (e.Train.TrainDestination == express.TrainDestination) continue;  // ②
+                        if (e.Station.ArrivalTime is not TimeSpan otherArr) continue;
+                        if (prevExpressArr.HasValue && otherArr <= prevExpressArr.Value) continue;
+                        if (otherArr >= expressDep) continue;
+
+                        result.Add(new ToExpressPair(e.Train, e.Station, express, sta));
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        private static List<FromExpressPair> ExtractFromExpressPairs(
+    List<StaffTrain> trains,
+    Dictionary<string, List<StationEntry>> idx)
+        {
+            var result = new List<FromExpressPair>();
+
+            foreach (var express in trains.Where(IsExpress))
+            {
+                var stas = express.StaffStations;
+                for (int i = 0; i < stas.Count; i++)
+                {
+                    var sta = stas[i];
+                    if (i == 0 || i == stas.Count - 1) continue;
+                    if (sta.StopType == StopType.Pass) continue;
+                    if (sta.DepartureTime is not TimeSpan expressDep) continue;
+
+                    if (!idx.TryGetValue(sta.StationID, out var entries)) continue;
+
+                    var next = entries
+                        .Where(e =>
+                            e.Train != express &&
+                            e.Train.IsDownward == express.IsDownward &&
+                            !IsExpress(e.Train) &&
+                            !IsDeadheadOrTest(e.Train) &&                                    // ①
+                            e.Train.TrainDestination != express.TrainDestination &&           // ②
+                            e.Station.StopType != StopType.Pass &&
+                            e.Station.DepartureTime is TimeSpan d &&
+                            d >= expressDep)
+                        .OrderBy(e => e.Station.DepartureTime)
+                        .FirstOrDefault();
+
+                    if (next is null) continue;
+
+                    result.Add(new FromExpressPair(express, sta, next.Train, next.Station));
+                }
+            }
+
+            return result;
+        }
+
+        private static List<OvertakePair> ExtractOvertakePairs(
+            List<StaffTrain> trains,
+            Dictionary<string, List<StationEntry>> idx)
+        {
+            var result = new List<OvertakePair>();
+
+            foreach (var self in trains)
+            {
+                foreach (var sta in self.StaffStations)
+                {
+                    if (sta.StopType == StopType.Pass) continue;
+                    if (sta.ArrivalTime is not TimeSpan selfArr) continue;
+                    if (sta.DepartureTime is not TimeSpan selfDep) continue;
+
+                    if (!idx.TryGetValue(sta.StationID, out var entries)) continue;
+
+                    foreach (var e in entries)
+                    {
+                        if (e.Train == self) continue;
+                        if (e.Train.IsDownward != self.IsDownward) continue;
+                        if (e.Station.StopType != StopType.Pass) continue;
+
+                        var passTime = e.Station.ArrivalTime ?? e.Station.DepartureTime;
+                        if (passTime is not TimeSpan pt) continue;
+                        if (pt <= selfArr || pt >= selfDep) continue;
+
+                        result.Add(new OvertakePair(self, sta, e.Train, e.Station));
+                    }
+                }
+            }
+
+            return result;
         }
 
         // ─────────────────────────────
-        // 交換
+        // 備考収集
         // ─────────────────────────────
 
-        /// <summary>交換備考を生成する（対向列車が発時刻5分前以内に現駅に存在）</summary>
-        private static IEnumerable<string> GetCrossNotes(
+        private static void CollectCrossingNotes(
             StaffTrain self,
-            StaffStation selfSta,
             Dictionary<string, List<StationEntry>> idx,
-            StaffNoteAbbreviationTable abbr)
+            StaffNoteAbbreviationTable abbr,
+            RouteConfig routeConfig,
+            List<PendingNote> notes)
         {
-            var dep = selfSta.DepartureTime!.Value;
-            var windowStart = dep - TimeSpan.FromMinutes(5);
+            var stas = self.StaffStations;
+            var candidates = new Dictionary<StaffTrain, (int SelfStaIndex, StationEntry Other)>();
 
-            if (!idx.TryGetValue(selfSta.StationID, out var entries)) yield break;
-
-            foreach (var e in entries)
+            for (int i = 0; i < stas.Count - 1; i++)
             {
-                if (e.Train == self) continue;
-                if (e.Train.IsDownward == self.IsDownward) continue; // 対向列車のみ
+                var selfSta = stas[i];
+                var nextSta = stas[i + 1];
 
-                TimeSpan? checkTime;
-                string suffix;
+                if (!routeConfig.IsSingleTrackBetween(selfSta.StationID, nextSta.StationID)) continue;
+                if (selfSta.DepartureTime is not TimeSpan selfDep) continue;
 
-                if (e.Station.StopType == StopType.Pass)
+                var windowStart = selfDep - TimeSpan.FromMinutes(CrossingWindowMinutes);
+
+                if (!idx.TryGetValue(selfSta.StationID, out var entries)) continue;
+
+                foreach (var e in entries)
                 {
-                    // 通過列車：通過時刻を使用
-                    checkTime = e.Station.ArrivalTime ?? e.Station.DepartureTime;
-                    suffix = "通";
-                }
-                else
-                {
-                    // 停車列車：到着時刻を使用
-                    checkTime = e.Station.ArrivalTime;
-                    suffix = "着";
-                }
+                    if (e.Train == self) continue;
+                    if (e.Train.IsDownward == self.IsDownward) continue;
+                    if (e.Train.OperationNumber == self.OperationNumber) continue;
 
-                if (checkTime is not TimeSpan ct) continue;
-                if (ct < windowStart || ct > dep) continue;
+                    if (!idx.TryGetValue(nextSta.StationID, out var nextEntries)) continue;
+                    if (!nextEntries.Any(ne => ne.Train == e.Train)) continue;
 
-                yield return $"× {abbr.Class(e.Train.TrainType)} {abbr.Dest(e.Train.TrainDestination)} {ct.Minutes:D2}{suffix}";
+                    var checkTime = e.Station.StopType == StopType.Pass
+                        ? e.Station.ArrivalTime ?? e.Station.DepartureTime
+                        : e.Station.ArrivalTime;
+
+                    if (checkTime is not TimeSpan ct) continue;
+                    if (ct < windowStart || ct > selfDep) continue;
+
+                    if (candidates.TryGetValue(e.Train, out var existing))
+                    {
+                        if (i < existing.SelfStaIndex)
+                            candidates[e.Train] = (i, e);
+                    }
+                    else
+                    {
+                        candidates[e.Train] = (i, e);
+                    }
+                }
+            }
+
+            foreach (var (_, (staIdx, other)) in candidates)
+            {
+                var selfSta = stas[staIdx];
+                var timeType = other.Station.StopType == StopType.Pass ? TimeType.Pass : TimeType.Arrival;
+                var info = FormatOtherTrainInfo(other.Train, other.Station, timeType, abbr);
+                if (info is null) continue;
+
+                var time = other.Station.StopType == StopType.Pass
+                    ? other.Station.ArrivalTime ?? other.Station.DepartureTime
+                    : other.Station.ArrivalTime;
+                if (time is null) continue;
+
+                notes.Add(new PendingNote(selfSta, time.Value, $" ×  {info}"));
+            }
+        }
+
+        private static void CollectGeneralConnectionNotes(
+            List<GeneralConnectionPair> pairs,
+            StaffNoteAbbreviationTable abbr,
+            List<PendingNote> notes)
+        {
+            foreach (var p in pairs)
+            {
+                var prefix = ConnectionPrefix(p.ArrivalStation, p.DepartureStation);
+
+                // 前列車（到着側）：相手の発時刻を記載
+                var depInfo = FormatOtherTrainInfo(p.DepartureTrain, p.DepartureStation, TimeType.Departure, abbr);
+                if (depInfo is not null && p.DepartureStation.DepartureTime is TimeSpan depTime)
+                    notes.Add(new PendingNote(p.ArrivalStation, depTime, $"{prefix}{depInfo}"));
+
+                // 後列車（出発側）：相手の着時刻を記載
+                var arrInfo = FormatOtherTrainInfo(p.ArrivalTrain, p.ArrivalStation, TimeType.Arrival, abbr);
+                if (arrInfo is not null && p.ArrivalStation.ArrivalTime is TimeSpan arrTime)
+                    notes.Add(new PendingNote(p.DepartureStation, arrTime, $"{prefix}{arrInfo}"));
+            }
+        }
+
+        private static void CollectToExpressNotes(
+            List<ToExpressPair> pairs,
+            StaffNoteAbbreviationTable abbr,
+            List<PendingNote> notes)
+        {
+            foreach (var p in pairs)
+            {
+                var prefix = ConnectionPrefix(p.IncomingStation, p.ExpressStation);
+                var depInfo = FormatOtherTrainInfo(p.ExpressTrain, p.ExpressStation, TimeType.Departure, abbr);
+                if (depInfo is null) continue;
+                if (p.ExpressStation.DepartureTime is not TimeSpan depTime) continue;
+
+                // 一般列車側のみ記載
+                notes.Add(new PendingNote(p.IncomingStation, depTime, $"{prefix}{depInfo}"));
+            }
+        }
+
+        private static void CollectFromExpressNotes(
+            List<FromExpressPair> pairs,
+            StaffNoteAbbreviationTable abbr,
+            List<PendingNote> notes)
+        {
+            foreach (var p in pairs)
+            {
+                var prefix = ConnectionPrefix(p.ExpressStation, p.OutgoingStation);
+                var depInfo = FormatOtherTrainInfo(p.OutgoingTrain, p.OutgoingStation, TimeType.Departure, abbr);
+                if (depInfo is null) continue;
+                if (p.OutgoingStation.DepartureTime is not TimeSpan depTime) continue;
+
+                // 特急側のみ記載
+                notes.Add(new PendingNote(p.ExpressStation, depTime, $"{prefix}{depInfo}"));
+            }
+        }
+
+        private static void CollectOvertakeNotes(
+            List<OvertakePair> pairs,
+            StaffNoteAbbreviationTable abbr,
+            List<PendingNote> notes)
+        {
+            foreach (var p in pairs)
+            {
+                var info = FormatOtherTrainInfo(p.PassingTrain, p.PassingStation, TimeType.Pass, abbr);
+                if (info is null) continue;
+
+                var time = p.PassingStation.ArrivalTime ?? p.PassingStation.DepartureTime;
+                if (time is null) continue;
+
+                // 待たされる列車側のみ記載
+                notes.Add(new PendingNote(p.WaitingStation, time.Value, $"[待]{info}"));
             }
         }
 
         // ─────────────────────────────
-        // インデックス構築
+        // ヘルパー
         // ─────────────────────────────
 
+        /// <summary>
+        /// 2つの停車駅の停車時間帯に重なりがあるか返す
+        /// </summary>
+        private static bool HasStopOverlap(StaffStation a, StaffStation b)
+        {
+            if (a.ArrivalTime is not TimeSpan aArr) return false;
+            if (a.DepartureTime is not TimeSpan aDep) return false;
+            if (b.ArrivalTime is not TimeSpan bArr) return false;
+            if (b.DepartureTime is not TimeSpan bDep) return false;
+            return aArr < bDep && bArr < aDep;
+        }
+
+        /// <summary>停車時間の重複状況から接続・連絡プレフィックスを返す</summary>
+        private static string ConnectionPrefix(StaffStation a, StaffStation b)
+            => HasStopOverlap(a, b) ? "(接)" : "(連)";
+
+        /// <summary>特急列車かどうかを返す</summary>
+        private static bool IsExpress(StaffTrain train)
+            => train.TrainType.Contains("特急");
+
+        /// <summary>回送・試運転列車かどうかを返す</summary>
+        private static bool IsDeadheadOrTest(StaffTrain train)
+            => train.TrainType.Contains("回送") || train.TrainType.Contains("試運転");
+
+        /// <summary>指定駅における1つ前の同方向特急の到着時刻を返す</summary>
+        private static TimeSpan? GetPrevExpressArrival(
+            StaffTrain express,
+            StaffStation station,
+            Dictionary<string, List<StationEntry>> idx)
+        {
+            if (!idx.TryGetValue(station.StationID, out var entries)) return null;
+            if (station.ArrivalTime is not TimeSpan selfArr) return null;
+
+            return entries
+                .Where(e =>
+                    e.Train != express &&
+                    IsExpress(e.Train) &&
+                    e.Train.IsDownward == express.IsDownward &&
+                    e.Station.ArrivalTime is TimeSpan t &&
+                    t < selfArr)
+                .Select(e => e.Station.ArrivalTime!.Value)
+                .OrderByDescending(t => t)
+                .Cast<TimeSpan?>()
+                .FirstOrDefault();
+        }
+
+        /// <summary>
+        /// 駅IDをキーに全列車の駅エントリを引くインデックスを構築する
+        /// </summary>
         private static Dictionary<string, List<StationEntry>> BuildIndex(List<StaffTrain> trains)
         {
             var dict = new Dictionary<string, List<StationEntry>>();
@@ -108,19 +451,108 @@ namespace StaffGenerator.Parser
             return dict;
         }
 
-
-        // ─────────────────────────────
-        // ユーティリティ
-        // ─────────────────────────────
-
-        private static void AppendNote(StaffStation sta, string note)
+        /// <summary>
+        /// 同一到着から複数出発がある場合、先発列車が止まらない駅に停車する列車のみ残す
+        /// </summary>
+        private static List<GeneralConnectionPair> ApplyMultiDepartureFilter(
+            List<GeneralConnectionPair> pairs)
         {
-            sta.Note = string.IsNullOrEmpty(sta.Note) ? note : sta.Note + "\n" + note;
+            var toRemove = new HashSet<GeneralConnectionPair>(ReferenceEqualityComparer.Instance);
+
+            var groups = pairs
+                .GroupBy(p => (p.ArrivalTrain, p.ArrivalStation.StationID))
+                .Where(g => g.Count() > 1);
+
+            foreach (var group in groups)
+            {
+                var sorted = group.OrderBy(p => p.DepartureStation.DepartureTime).ToList();
+                var firstStops = GetStopsAfter(sorted[0].DepartureTrain, sorted[0].DepartureStation.StationID);
+
+                for (int i = 1; i < sorted.Count; i++)
+                {
+                    var otherStops = GetStopsAfter(sorted[i].DepartureTrain, sorted[i].DepartureStation.StationID);
+
+                    // 先発が止まらない駅に停車しないなら不要
+                    if (!otherStops.Any(s => !firstStops.Contains(s)))
+                        toRemove.Add(sorted[i]);
+                }
+            }
+
+            return pairs.Where(p => !toRemove.Contains(p)).ToList();
         }
 
+
+        /// <summary>
+        /// 指定stationIDより後の停車駅IDセットを返す（通過駅は除く）
+        /// </summary>
+        private static HashSet<string> GetStopsAfter(StaffTrain train, string fromStationID)
+        {
+            var result = new HashSet<string>();
+            bool found = false;
+            foreach (var sta in train.StaffStations)
+            {
+                if (found && sta.StopType != StopType.Pass)
+                    result.Add(sta.StationID);
+                if (sta.StationID == fromStationID)
+                    found = true;
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// 相手列車の情報を「種 行 ①mm着/発/通」形式に変換する
+        /// 時刻が取得できない場合はnullを返す
+        /// </summary>
+        private static string? FormatOtherTrainInfo(
+            StaffTrain train,
+            StaffStation station,
+            TimeType timeType,
+            StaffNoteAbbreviationTable abbr)
+        {
+            TimeSpan? time;
+            string suffix;
+
+            switch (timeType)
+            {
+                case TimeType.Arrival:
+                    if (station.ArrivalTime is not TimeSpan arr) return null;
+                    time = arr;
+                    suffix = "着";
+                    break;
+
+                case TimeType.Departure:
+                    if (station.DepartureTime is not TimeSpan dep) return null;
+                    time = dep;
+                    suffix = "発";
+                    break;
+
+                case TimeType.Pass:
+                    time = station.ArrivalTime ?? station.DepartureTime;
+                    if (time is null) return null;
+                    suffix = "通";
+                    break;
+
+                default: return null;
+            }
+
+            var trainClass = abbr.Class(train.TrainType);
+            var dest = abbr.Dest(train.TrainDestination);
+            var bansen = ConvertToCircledNumber(station.TrackNumber ?? "");
+            var mm = ((TimeSpan)time).Minutes.ToString("D2");
+
+            return $"{trainClass} {dest} {bansen}{mm}{suffix}";
+        }
+
+        /// <summary>
+        /// 備考を\n区切りで末尾に連結する
+        /// </summary>
         private static void AppendNote(StaffStation sta, IEnumerable<string> notes)
         {
-            foreach (var n in notes) AppendNote(sta, n);
+            foreach (var n in notes)
+            {
+                if (string.IsNullOrEmpty(n)) continue;
+                sta.Note = string.IsNullOrEmpty(sta.Note) ? n : sta.Note + "\n" + n;
+            }
         }
 
         /// <summary>
@@ -128,9 +560,8 @@ namespace StaffGenerator.Parser
         /// </summary>
         /// <param name="text">変換元文字列</param>
         /// <returns>丸付き数字文字列</returns>
-        private static string ConvertToCircledNumber(string? text)
+        private static string ConvertToCircledNumber(string text)
         {
-            if (text == null) return "";
             if (!int.TryParse(text, out int number))
             {
                 return text;
@@ -141,7 +572,7 @@ namespace StaffGenerator.Parser
             //
             if (number == 0)
             {
-                return "";
+                return "　";
             }
 
             //

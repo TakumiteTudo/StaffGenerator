@@ -35,6 +35,7 @@
             button3 = new Button();
             button4 = new Button();
             comboBox1 = new ComboBox();
+            button5 = new Button();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             SuspendLayout();
             // 
@@ -95,11 +96,22 @@
             comboBox1.Size = new Size(191, 23);
             comboBox1.TabIndex = 5;
             // 
+            // button5
+            // 
+            button5.Location = new Point(501, 12);
+            button5.Name = "button5";
+            button5.Size = new Size(79, 23);
+            button5.TabIndex = 6;
+            button5.Text = "列車再描画";
+            button5.UseVisualStyleBackColor = true;
+            button5.Click += button5_Click;
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(722, 1005);
+            Controls.Add(button5);
             Controls.Add(comboBox1);
             Controls.Add(button4);
             Controls.Add(button3);
@@ -120,5 +132,6 @@
         private Button button3;
         private Button button4;
         private ComboBox comboBox1;
+        private Button button5;
     }
 }

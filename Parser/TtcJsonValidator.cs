@@ -61,7 +61,7 @@ namespace StaffGenerator.Parser
                 foreach (var trainElem in trainListElem.EnumerateArray())
                 {
                     // 基本的な必須フィールド存在チェック
-                    CheckProp(trainElem, "operationNumber", JsonValueKind.Number, issues, ti);
+                    CheckProp(trainElem, "OperationNumber", JsonValueKind.Number, issues, ti);
                     CheckProp(trainElem, "trainNumber", JsonValueKind.String, issues, ti);
                     CheckProp(trainElem, "trainClass", JsonValueKind.String, issues, ti);
                     CheckProp(trainElem, "originStationID", JsonValueKind.String, issues, ti);

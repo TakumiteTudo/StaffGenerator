@@ -59,6 +59,7 @@ namespace StaffGenerator.Parser
 
             return new StaffTrain
             {
+                OperationNumber = src.operationNumber,
                 TrainName = src.trainNumber ?? "",
                 TrainType = src.trainClass ?? "",
                 TrainTypeImgName = src.trainClass ?? "",
@@ -87,7 +88,8 @@ namespace StaffGenerator.Parser
 
         /// <summary>
         /// 同一stationIDが連続する場合を入換として統合する
-        /// 前エントリの時刻は破棄し、後エントリの発車時刻のみ残す
+        /// 先頭の入換：後エントリの発時刻のみ残す
+        /// 末尾の入換：前エントリの着時刻のみ残す
         /// </summary>
         private static List<(TTC_StationData data, bool isShunting)> MergeShuntingStations(
             List<TTC_StationData> src)
@@ -101,17 +103,20 @@ namespace StaffGenerator.Parser
                 if (i + 1 < src.Count && src[i + 1].stationID == cur.stationID)
                 {
                     var next = src[i + 1];
+                    var isLast = (i + 1 == src.Count - 1);
+
                     var merged = new TTC_StationData
                     {
-                        stationID = next.stationID,
-                        stationName = next.stationName,
-                        stopPosName = next.stopPosName,
-                        bansen = next.bansen,
-                        script = next.script,
-                        isSaiji = next.isSaiji,
-                        biko = next.biko,
-                        arrivalTime = new TTC_TimeOfDay { h = -1 }, // 到着時刻破棄
-                        departureTime = next.departureTime
+                        stationID = isLast ? cur.stationID : next.stationID,
+                        stationName = isLast ? cur.stationName : next.stationName,
+                        stopPosName = isLast ? cur.stopPosName : next.stopPosName,
+                        bansen = isLast ? cur.bansen : next.bansen,
+                        script = isLast ? cur.script : next.script,
+                        isSaiji = isLast ? cur.isSaiji : next.isSaiji,
+                        biko = isLast ? cur.biko : next.biko,
+                        // 末尾：前エントリの着時刻のみ残す、先頭：後エントリの発時刻のみ残す
+                        arrivalTime = isLast ? cur.arrivalTime : new TTC_TimeOfDay { h = -1 },
+                        departureTime = isLast ? new TTC_TimeOfDay { h = -1 } : next.departureTime
                     };
 
                     result.Add((merged, isShunting: true));

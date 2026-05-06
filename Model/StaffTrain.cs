@@ -2,12 +2,13 @@
 {
     public class StaffTrain
     {
-        public string TrainName = "";
-        public string TrainType = "";
-        public string TrainTypeImgName = "";
-        public string TrainDestination = "";
-        public string TrainNote = "";
-        public bool IsDownward = true; // 下り方向フラグ
-        public List<StaffStation> StaffStations = new List<StaffStation>();
+        public int OperationNumber { get; set; }
+        public string TrainName { get; set; } = "";
+        public string TrainType { get; set; } = "";
+        public string TrainTypeImgName { get; set; } = "";
+        public string TrainDestination { get; set; } = "";
+        public string TrainNote { get; set; } = "";
+        public bool IsDownward { get; set; } = true; // 下り方向フラグ
+        public List<StaffStation> StaffStations { get; set; } = new List<StaffStation>();
     }
 }

@@ -145,6 +145,8 @@ namespace StaffGenerator.Render
                 { "急行", Color.FromArgb(255, 171, 34) },
                 { "快急", Color.FromArgb(222, 116, 255) },
                 { "特急", Color.FromArgb(255, 100, 100) },
+                { "回送", Color.FromArgb(200, 200, 200) },
+                { "試運転", Color.FromArgb(200, 200, 200) },
             };
         }
 
@@ -159,6 +161,7 @@ namespace StaffGenerator.Render
         /// <returns>描画済みBitmap</returns>
         public Bitmap Render(StaffTrain train)
         {
+
             Bitmap bmp = new Bitmap(_templateBitmap);
 
             using Graphics g = Graphics.FromImage(bmp);
@@ -212,6 +215,12 @@ namespace StaffGenerator.Render
                 StaffStation station = stations[i];
 
                 int rowHeight = GetRowHeight(station);
+                if ((i == 0 || i == stations.Count - 1) && !station.IsShunting)
+                {
+                    rowHeight = ROW_HEIGHT_SMALL;
+                }
+
+                rowHeight = Math.Max(rowHeight, GetMinHeight(station));
 
                 // 改ページ判定
                 if (currentY + rowHeight > Y_LIMIT)
@@ -527,6 +536,7 @@ namespace StaffGenerator.Render
 
                 int offsetY = isLarge ? 0 : -4;
 
+
                 DrawTimeText(
                     g,
                     layout,
@@ -747,7 +757,7 @@ namespace StaffGenerator.Render
         #region Utility
 
         /// <summary>
-        /// 行高さ取得
+        /// 標準行高さ取得
         /// </summary>
         /// <param name="station">駅情報</param>
         /// <returns>行高さ</returns>
@@ -786,6 +796,31 @@ namespace StaffGenerator.Render
 
             return ROW_HEIGHT_LARGE;
         }
+
+        /// <summary>
+        /// 最少高さ取得
+        /// </summary>
+        /// <param name="station">駅情報</param>
+        /// <returns>行高さ</returns>
+        private int GetMinHeight(StaffStation station)
+        {
+            //空行になる条件の箇所は対象外  
+            if (station.StopType == StopType.Pass && station.IsTimingPoint == false)
+            {
+                return 0;
+            }
+            int r = 24;
+
+            if (station.Note == "")
+            {
+                return r;
+            }
+
+            r += 14 * station.Note.Split("\n").Count();
+
+            return r;
+        }
+
 
 
         /// <summary>
