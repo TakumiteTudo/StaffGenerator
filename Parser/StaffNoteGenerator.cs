@@ -116,7 +116,8 @@ namespace StaffGenerator.Parser
                         if (e.Train == self) continue;
                         if (e.Train.IsDownward != self.IsDownward) continue;
                         if (e.Station.StopType == StopType.Pass) continue;
-                        if (IsDeadheadOrTest(e.Train)) continue;                             // ①
+                        if (IsDeadheadOrTest(e.Train)) continue;                             // ①        
+                        if (IsExpress(e.Train)) continue;
                         if (e.Train.TrainDestination == self.TrainDestination) continue;     // ②
                         if (e.Station.DepartureTime is not TimeSpan otherDep) continue;
                         if (otherDep <= selfArr) continue;
@@ -131,6 +132,19 @@ namespace StaffGenerator.Parser
                 .GroupBy(p => (p.DepartureTrain, p.DepartureStation.StationID))
                 .Select(g => g.OrderByDescending(p => p.ArrivalStation.ArrivalTime).First())
                 .ToList();
+
+            // 同一接続元から同一種別・同一行先への出発が複数ある場合は先発のみ残す
+            // （後発は先発でカバー済みの行先のため不要）
+            filtered = filtered
+                .GroupBy(p => (
+                    p.ArrivalTrain,
+                    p.ArrivalStation.StationID,
+                    p.DepartureTrain.TrainType,
+                    p.DepartureTrain.TrainDestination
+                ))
+                .Select(g => g.OrderBy(p => p.DepartureStation.DepartureTime).First())
+                .ToList();
+
 
             return ApplyMultiDepartureFilter(filtered, idx);
         }
@@ -159,7 +173,7 @@ namespace StaffGenerator.Parser
                     {
                         if (e.Train == express) continue;
                         if (e.Train.IsDownward != express.IsDownward) continue;
-                        if (e.Station.StopType == StopType.Pass) continue;
+                        if (e.Station.StopType == StopType.Stop) continue;
                         if (IsDeadheadOrTest(e.Train)) continue;                             // ①
                         if (e.Train.TrainDestination == express.TrainDestination) continue;  // ②
                         if (e.Station.ArrivalTime is not TimeSpan otherArr) continue;
@@ -193,26 +207,75 @@ namespace StaffGenerator.Parser
 
                     if (!idx.TryGetValue(sta.StationID, out var entries)) continue;
 
-                    var next = entries
+                    // 特急がA→G間で通過する駅IDセット（B,C,D,E,F）
+                    var skippedStationIDs = stas
+                        .Skip(i + 1)
+                        .TakeWhile(s => s.StopType == StopType.Pass)
+                        .Select(s => s.StationID)
+                        .Where(id => !string.IsNullOrEmpty(id))
+                        .ToHashSet();
+
+                    // 時間制限内の候補を発車時刻順に列挙
+                    var candidates = entries
                         .Where(e =>
                             e.Train != express &&
                             e.Train.IsDownward == express.IsDownward &&
                             !IsExpress(e.Train) &&
-                            !IsDeadheadOrTest(e.Train) &&                                    // ①
-                            e.Train.TrainDestination != express.TrainDestination &&           // ②
+                            !IsDeadheadOrTest(e.Train) &&
+                            e.Train.TrainDestination != sta.DisplayName &&
                             e.Station.StopType != StopType.Pass &&
                             e.Station.DepartureTime is TimeSpan d &&
-                            d >= expressDep)
+                            d >= expressDep &&
+                            (d - expressDep).TotalMinutes <= ExpressConnectionMaxMinutes)
                         .OrderBy(e => e.Station.DepartureTime)
-                        .FirstOrDefault();
+                        .ToList();
 
-                    if (next is null) continue;
+                    if (candidates.Count == 0) continue;
 
-                    result.Add(new FromExpressPair(express, sta, next.Train, next.Station));
+                    // まだカバーされていない通過駅セット
+                    var uncovered = new HashSet<string>(skippedStationIDs);
+
+                    foreach (var candidate in candidates)
+                    {
+                        // この列車がカバーする通過駅（停車する通過駅）
+                        var covered = skippedStationIDs
+                            .Where(id => StopsAtStation(candidate.Train, candidate.Station.StationID, id))
+                            .ToList();
+
+                        bool isFirst = result.All(r =>
+                            r.ExpressTrain != express || r.ExpressStation != sta);
+
+                        // 先発（初回）は無条件で追加
+                        // 以降は未カバー駅を新たにカバーする場合のみ追加
+                        if (isFirst || covered.Any(id => uncovered.Contains(id)))
+                        {
+                            result.Add(new FromExpressPair(express, sta, candidate.Train, candidate.Station));
+                            foreach (var id in covered) uncovered.Remove(id);
+                        }
+
+                        if (uncovered.Count == 0) break;
+                    }
                 }
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// 指定列車がfromStationIDより後でtargetStationIDに停車するか返す
+        /// </summary>
+        private static bool StopsAtStation(
+            StaffTrain train, string fromStationID, string targetStationID)
+        {
+            bool found = false;
+            foreach (var sta in train.StaffStations)
+            {
+                if (sta.StationID == fromStationID) { found = true; continue; }
+                if (!found) continue;
+                if (sta.StationID == targetStationID)
+                    return sta.StopType != StopType.Pass;
+            }
+            return false;
         }
 
         private static List<OvertakePair> ExtractOvertakePairs(
@@ -446,6 +509,26 @@ namespace StaffGenerator.Parser
                 .Cast<TimeSpan?>()
                 .FirstOrDefault();
         }
+
+        /// <summary>
+        /// 指定列車がfromStationIDからtoStationIDの区間でtoStationIDを通過扱いするか返す
+        /// </summary>
+        private static bool PassesThroughStation(
+            StaffTrain train, string fromStationID, string toStationID)
+        {
+            bool found = false;
+            foreach (var sta in train.StaffStations)
+            {
+                if (sta.StationID == fromStationID) { found = true; continue; }
+                if (!found) continue;
+                if (sta.StationID == toStationID)
+                    return sta.StopType == StopType.Pass;
+            }
+            // 到達しない（行かない路線）→ 通過とみなさない
+            return false;
+        }
+
+
 
         /// <summary>
         /// 駅IDをキーに全列車の駅エントリを引くインデックスを構築する
