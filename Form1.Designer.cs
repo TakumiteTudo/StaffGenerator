@@ -36,6 +36,7 @@
             button4 = new Button();
             comboBox1 = new ComboBox();
             button5 = new Button();
+            checkBox1 = new CheckBox();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             SuspendLayout();
             // 
@@ -106,11 +107,23 @@
             button5.UseVisualStyleBackColor = true;
             button5.Click += button5_Click;
             // 
+            // checkBox1
+            // 
+            checkBox1.AutoSize = true;
+            checkBox1.Location = new Point(636, 12);
+            checkBox1.Name = "checkBox1";
+            checkBox1.Size = new Size(84, 19);
+            checkBox1.TabIndex = 7;
+            checkBox1.Text = "さいぜんめん";
+            checkBox1.UseVisualStyleBackColor = true;
+            checkBox1.CheckedChanged += checkBox1_CheckedChanged;
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(722, 1005);
+            Controls.Add(checkBox1);
             Controls.Add(button5);
             Controls.Add(comboBox1);
             Controls.Add(button4);
@@ -122,6 +135,7 @@
             Text = "Form1";
             ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
             ResumeLayout(false);
+            PerformLayout();
         }
 
         #endregion
@@ -133,5 +147,6 @@
         private Button button4;
         private ComboBox comboBox1;
         private Button button5;
+        private CheckBox checkBox1;
     }
 }

@@ -91,10 +91,10 @@ namespace StaffGenerator.Parser
         /// 先頭の入換：後エントリの発時刻のみ残す
         /// 末尾の入換：前エントリの着時刻のみ残す
         /// </summary>
-        private static List<(TTC_StationData data, bool isShunting)> MergeShuntingStations(
+        private static List<(TTC_StationData data, bool isArrShunting, bool isDepShunting)> MergeShuntingStations(
             List<TTC_StationData> src)
         {
-            var result = new List<(TTC_StationData, bool)>();
+            var result = new List<(TTC_StationData, bool, bool)>();
 
             for (int i = 0; i < src.Count; i++)
             {
@@ -115,16 +115,16 @@ namespace StaffGenerator.Parser
                         isSaiji = isLast ? cur.isSaiji : next.isSaiji,
                         biko = isLast ? cur.biko : next.biko,
                         // 末尾：前エントリの着時刻のみ残す、先頭：後エントリの発時刻のみ残す
-                        arrivalTime = isLast ? cur.arrivalTime : new TTC_TimeOfDay { h = -1 },
-                        departureTime = isLast ? new TTC_TimeOfDay { h = -1 } : next.departureTime
+                        arrivalTime = isLast ? cur.arrivalTime : next.arrivalTime,
+                        departureTime = isLast ? cur.departureTime : next.departureTime
                     };
 
-                    result.Add((merged, isShunting: true));
+                    result.Add((merged, isArrShunting: !isLast, isDepShunting: isLast));
                     i++;
                 }
                 else
                 {
-                    result.Add((cur, isShunting: false));
+                    result.Add((cur, isArrShunting: false, isDepShunting: false));
                 }
             }
 
@@ -135,11 +135,11 @@ namespace StaffGenerator.Parser
         /// TTC_StationDataをStaffStationに変換する
         /// </summary>
         private static StaffStation ConvertStation(
-            (TTC_StationData data, bool isShunting) src,
+            (TTC_StationData data, bool isArrShunting, bool isDepShunting) src,
             StationMasterTable master,
             bool isDownward)
         {
-            var (sta, isShunting) = src;
+            var (sta, isArrShunting, isDepShunting) = src;
             var arr = ToTimeSpan(sta.arrivalTime);
             var dep = ToTimeSpan(sta.departureTime);
 
@@ -154,7 +154,8 @@ namespace StaffGenerator.Parser
                 TrackNumber = sta.bansen ?? "",
                 DoorDirection = master.ResolveDoorDirection(sta.stationID, sta.bansen ?? "", isDownward),
                 Note = sta.biko ?? "",
-                IsShunting = isShunting,
+                IsArrShunting = isArrShunting,
+                IsDepShunting = isDepShunting,
                 Script = sta.script ?? ""
             };
         }

@@ -115,6 +115,8 @@ namespace StaffGenerator.Render
 
         private readonly Dictionary<string, Color> _trainTypeColors;
 
+        private readonly Dictionary<string, Color> _trainTypeOpColors;
+
         #endregion
 
         #region コンストラクタ
@@ -145,6 +147,18 @@ namespace StaffGenerator.Render
                 { "急行", Color.FromArgb(255, 171, 34) },
                 { "快急", Color.FromArgb(222, 116, 255) },
                 { "特急", Color.FromArgb(255, 100, 100) },
+                { "回送", Color.FromArgb(200, 200, 200) },
+                { "試運転", Color.FromArgb(200, 200, 200) },
+            };
+
+            _trainTypeOpColors = new()
+            {
+                { "普通", Color.FromArgb(200, 200, 200) },
+                { "準急", Color.FromArgb(200, 200, 200) },
+                { "区急", Color.FromArgb(200, 200, 200) },
+                { "急行", Color.FromArgb(200, 200, 200) },
+                { "快急", Color.FromArgb(200, 200, 200) },
+                { "特急", Color.FromArgb(200, 200, 200) },
                 { "回送", Color.FromArgb(200, 200, 200) },
                 { "試運転", Color.FromArgb(200, 200, 200) },
             };
@@ -215,7 +229,7 @@ namespace StaffGenerator.Render
                 StaffStation station = stations[i];
 
                 int rowHeight = GetRowHeight(station);
-                if ((i == 0 || i == stations.Count - 1) && !station.IsShunting)
+                if ((i == 0 || i == stations.Count - 1) && !station.IsDepShunting)
                 {
                     rowHeight = ROW_HEIGHT_SMALL;
                 }
@@ -247,7 +261,7 @@ namespace StaffGenerator.Render
                 //
                 if (station.ArrivalTime.HasValue && station.IsTimingPoint && station.StopType != StopType.Pass)
                 {
-                    if ((i == 0) && !station.IsShunting)
+                    if ((i == 0) && !station.IsDepShunting)
                     {
                         layout.IsDrawArrival = false;
                     }
@@ -270,7 +284,7 @@ namespace StaffGenerator.Render
                 //
                 if (station.DepartureTime.HasValue)
                 {
-                    if ((i == stations.Count - 1) && !station.IsShunting)
+                    if ((i == stations.Count - 1) && !station.IsDepShunting)
                     {
                         layout.IsDrawDeparture = false;
                     }
@@ -461,7 +475,7 @@ namespace StaffGenerator.Render
 
             if (station.StopType != StopType.Pass)
             {
-                Brush brush = new SolidBrush(GetTrainTypeColor(trainClass));
+                Brush brush = new SolidBrush(GetTrainTypeColor(trainClass, station.StopType == StopType.OpStop));
                 g.FillRectangle(brush, new RectangleF(LEFT_X + layout.XOffset + 1, layout.Top, 112, layout.Bottom - layout.Top));
             }
 
@@ -521,26 +535,6 @@ namespace StaffGenerator.Render
         {
             SetTextRenderMode(g);
 
-            // 入換描画
-            if (station.IsShunting)
-            {
-                int offsetY = 0;
-                if (station.ArrivalTime.HasValue)
-                {
-                    //発側入換 
-                    offsetY += 27;
-                }
-
-                DrawTimeText(
-                    g,
-                    layout,
-                    "",
-                    "入",
-                    "換",
-                    false,
-                    false,
-                    offsetY);
-            }
 
             //
             // 到着時刻描画
@@ -552,8 +546,24 @@ namespace StaffGenerator.Render
 
                 int offsetY = isLarge ? 0 : -4;
 
+                // 入換描画
+                if (station.IsArrShunting)
+                {
 
-                DrawTimeText(
+                    DrawTimeText(
+                        g,
+                        layout,
+                        "",
+                        "入",
+                        "換",
+                        false,
+                        false,
+                        offsetY);
+                }
+
+                else
+                {
+                    DrawTimeText(
                     g,
                     layout,
                     station.ArrivalTime.Value.Hours.ToString("00"),
@@ -562,6 +572,7 @@ namespace StaffGenerator.Render
                     layout.IsDrawArrivalHours,
                     isLarge,
                     offsetY);
+                }
             }
 
             //
@@ -577,15 +588,33 @@ namespace StaffGenerator.Render
                 // 下側へ描画   
                 offsetY = isLarge ? layout.Bottom - layout.Top - 30 : layout.Bottom - layout.Top - 30;
 
-                DrawTimeText(
-                    g,
-                    layout,
-                    station.DepartureTime.Value.Hours.ToString("00"),
-                    station.DepartureTime.Value.Minutes.ToString("00"),
-                    station.DepartureTime.Value.Seconds.ToString("00"),
-                    layout.IsDrawDepartureHours,
-                    isLarge,
-                    offsetY);
+
+                // 入換描画
+                if (station.IsDepShunting)
+                {
+
+                    DrawTimeText(
+                        g,
+                        layout,
+                        "",
+                        "入",
+                        "換",
+                        false,
+                        false,
+                        offsetY);
+                }
+                else
+                {
+                    DrawTimeText(
+                        g,
+                        layout,
+                        station.DepartureTime.Value.Hours.ToString("00"),
+                        station.DepartureTime.Value.Minutes.ToString("00"),
+                        station.DepartureTime.Value.Seconds.ToString("00"),
+                        layout.IsDrawDepartureHours,
+                        isLarge,
+                        offsetY);
+                }
             }
         }
 
@@ -800,7 +829,7 @@ namespace StaffGenerator.Render
             if (station.ArrivalTime == null || station.DepartureTime == null)
             {
                 //始点・終点等時刻1つ
-                if (station.IsShunting)
+                if (station.IsDepShunting)
                 {
                     //入換ありは2行
                     return ROW_HEIGHT_LARGE;
@@ -849,14 +878,27 @@ namespace StaffGenerator.Render
         /// 種別色取得
         /// </summary>
         /// <param name="trainType">種別名</param>
+        /// <param name="isOpStop">運転停車か</param>
         /// <returns>種別色</returns>
-        private Color GetTrainTypeColor(string trainType)
+        private Color GetTrainTypeColor(string trainType, bool isOpStop)
         {
-            if (_trainTypeColors.TryGetValue(
-                trainType,
-                out Color color))
+            if (isOpStop)
             {
-                return color;
+                if (_trainTypeOpColors.TryGetValue(
+                    trainType,
+                    out Color color))
+                {
+                    return color;
+                }
+            }
+            else
+            {
+                if (_trainTypeColors.TryGetValue(
+                    trainType,
+                    out Color color))
+                {
+                    return color;
+                }
             }
 
             //

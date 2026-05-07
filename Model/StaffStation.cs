@@ -59,7 +59,11 @@ namespace StaffGenerator.Model
         /// <summary>
         /// 入換表示
         /// </summary>
-        public bool IsShunting { get; set; }
+        public bool IsArrShunting { get; set; }
+        /// <summary>
+        /// 入換表示
+        /// </summary>
+        public bool IsDepShunting { get; set; }
 
         /// <summary>
         /// 制御スクリプト
