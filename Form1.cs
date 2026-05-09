@@ -17,6 +17,13 @@ namespace StaffGenerator
         List<StaffTrain> _loadedTrains = new();
         int _currentIndex = 0;
 
+        /// <summary>現在表示中のスタフ画像リスト</summary>
+        private List<Bitmap> _currentBitmaps = [];
+
+        /// <summary>現在表示中の枚目（0始まり）</summary>
+        private int _currentPageIndex = 0;
+
+
         public Form1()
         {
             InitializeComponent();
@@ -42,9 +49,33 @@ namespace StaffGenerator
                 comboBox1.SelectedIndex = 0;
         }
 
-        private void PictureBox1_Render(Bitmap bitmap)
+        private void PictureBox1_Render(List<Bitmap> bitmaps)
         {
-            pictureBox1.Image = bitmap;
+            pictureBox1.Image = bitmaps[0];
+        }
+
+        /// <summary>
+        /// 描画結果をセットしてページ表示を初期化
+        /// </summary>
+        /// <param name="bitmaps">描画済み画像リスト</param>
+        private void SetBitmaps(List<Bitmap> bitmaps)
+        {
+            _currentBitmaps = bitmaps;
+            _currentPageIndex = 0;
+            UpdateDisplay();
+        }
+
+        /// <summary>
+        /// 現在のページ表示を更新
+        /// </summary>
+        private void UpdateDisplay()
+        {
+            if (_currentBitmaps.Count == 0) return;
+
+            pictureBox1.Image = _currentBitmaps[_currentPageIndex];
+            labelPage.Text = $"{_currentPageIndex + 1} / {_currentBitmaps.Count} 枚";
+            button1.Enabled = _currentPageIndex > 0;
+            button3.Enabled = _currentPageIndex < _currentBitmaps.Count - 1;
         }
 
         private void button2_Click(object sender, EventArgs e)
@@ -80,10 +111,20 @@ namespace StaffGenerator
 
         private void button1_Click(object sender, EventArgs e)
         {
+            if (_currentPageIndex > 0)
+            {
+                _currentPageIndex--;
+                UpdateDisplay();
+            }
         }
 
         private void button3_Click(object sender, EventArgs e)
         {
+            if (_currentPageIndex < _currentBitmaps.Count - 1)
+            {
+                _currentPageIndex++;
+                UpdateDisplay();
+            }
         }
 
 
@@ -96,8 +137,8 @@ namespace StaffGenerator
                 return;
 
             var train = _loadedTrains[comboBox1.SelectedIndex];
-            var bitmap = StaffRenderer.Render(train);
-            PictureBox1_Render(bitmap);
+            var bitmaps = StaffRenderer.Render(train);
+            SetBitmaps(bitmaps); // 修正：戻り値変更に合わせて
         }
 
         private void button5_Click(object sender, EventArgs e)
@@ -109,8 +150,8 @@ namespace StaffGenerator
                 return;
 
             var train = _loadedTrains[comboBox1.SelectedIndex];
-            var bitmap = StaffRenderer.Render(train);
-            PictureBox1_Render(bitmap);
+            var bitmaps = StaffRenderer.Render(train);
+            SetBitmaps(bitmaps); // 修正：戻り値変更に合わせて
         }
 
         private void checkBox1_CheckedChanged(object sender, EventArgs e)

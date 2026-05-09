@@ -64,7 +64,7 @@ namespace StaffGenerator.Parser
                 TrainType = src.trainClass ?? "",
                 TrainTypeImgName = src.trainClass ?? "",
                 TrainDestination = src.destinationStationName ?? "",
-                TrainNote = "",
+                TrainNote = src.staffComment,
                 IsDownward = isDownward,   // 追加
                 StaffStations = mergedList
                     .Select(s => ConvertStation(s, master, isDownward))
@@ -114,6 +114,7 @@ namespace StaffGenerator.Parser
                         script = isLast ? cur.script : next.script,
                         isSaiji = isLast ? cur.isSaiji : next.isSaiji,
                         biko = isLast ? cur.biko : next.biko,
+                        StopType = isLast ? cur.StopType : next.StopType,
                         // 末尾：前エントリの着時刻のみ残す、先頭：後エントリの発時刻のみ残す
                         arrivalTime = isLast ? cur.arrivalTime : next.arrivalTime,
                         departureTime = isLast ? cur.departureTime : next.departureTime

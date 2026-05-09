@@ -14,6 +14,8 @@ namespace StaffGenerator.Model
         Stop,
         Pass,
         OpStop,
-        AddStop
+        AddStop,
+        /// <summary>分割継続マーカー</summary>
+        SplitContinuation
     }
 }

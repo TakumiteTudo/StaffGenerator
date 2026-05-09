@@ -37,6 +37,7 @@
             comboBox1 = new ComboBox();
             button5 = new Button();
             checkBox1 = new CheckBox();
+            labelPage = new Label();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             SuspendLayout();
             // 
@@ -46,7 +47,7 @@
             button1.Name = "button1";
             button1.Size = new Size(55, 23);
             button1.TabIndex = 0;
-            button1.Text = "1242";
+            button1.Text = "前へ";
             button1.UseVisualStyleBackColor = true;
             button1.Click += button1_Click;
             // 
@@ -61,7 +62,7 @@
             // 
             // button2
             // 
-            button2.Location = new Point(164, 12);
+            button2.Location = new Point(214, 12);
             button2.Name = "button2";
             button2.Size = new Size(64, 23);
             button2.TabIndex = 2;
@@ -75,13 +76,13 @@
             button3.Name = "button3";
             button3.Size = new Size(55, 23);
             button3.TabIndex = 3;
-            button3.Text = "1215A";
+            button3.Text = "次へ";
             button3.UseVisualStyleBackColor = true;
             button3.Click += button3_Click;
             // 
             // button4
             // 
-            button4.Location = new Point(431, 12);
+            button4.Location = new Point(481, 12);
             button4.Name = "button4";
             button4.Size = new Size(64, 23);
             button4.TabIndex = 4;
@@ -92,14 +93,14 @@
             // comboBox1
             // 
             comboBox1.FormattingEnabled = true;
-            comboBox1.Location = new Point(234, 13);
+            comboBox1.Location = new Point(284, 13);
             comboBox1.Name = "comboBox1";
             comboBox1.Size = new Size(191, 23);
             comboBox1.TabIndex = 5;
             // 
             // button5
             // 
-            button5.Location = new Point(501, 12);
+            button5.Location = new Point(551, 12);
             button5.Name = "button5";
             button5.Size = new Size(79, 23);
             button5.TabIndex = 6;
@@ -110,7 +111,7 @@
             // checkBox1
             // 
             checkBox1.AutoSize = true;
-            checkBox1.Location = new Point(636, 12);
+            checkBox1.Location = new Point(636, 15);
             checkBox1.Name = "checkBox1";
             checkBox1.Size = new Size(84, 19);
             checkBox1.TabIndex = 7;
@@ -118,11 +119,21 @@
             checkBox1.UseVisualStyleBackColor = true;
             checkBox1.CheckedChanged += checkBox1_CheckedChanged;
             // 
+            // labelPage
+            // 
+            labelPage.AutoSize = true;
+            labelPage.Location = new Point(134, 16);
+            labelPage.Name = "labelPage";
+            labelPage.Size = new Size(38, 15);
+            labelPage.TabIndex = 8;
+            labelPage.Text = "label1";
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(722, 1005);
+            Controls.Add(labelPage);
             Controls.Add(checkBox1);
             Controls.Add(button5);
             Controls.Add(comboBox1);
@@ -148,5 +159,6 @@
         private ComboBox comboBox1;
         private Button button5;
         private CheckBox checkBox1;
+        private Label labelPage;
     }
 }

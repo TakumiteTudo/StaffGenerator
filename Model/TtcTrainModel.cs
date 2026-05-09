@@ -25,6 +25,7 @@ namespace StaffGenerator.Model
         public string[] temporaryStopStations;
         public bool isRegularService = true;
         public int carCount = 4;
+        public string staffComment;
     }
 
     /// <summary>

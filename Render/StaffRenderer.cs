@@ -117,6 +117,11 @@ namespace StaffGenerator.Render
 
         private readonly Dictionary<string, Color> _trainTypeOpColors;
 
+        /// <summary>
+        /// スタフ分割候補駅名（優先順）
+        /// </summary>
+        private static readonly string[] SplitCandidateNames = ["大道寺", "赤山町"];
+
         #endregion
 
         #region コンストラクタ
@@ -169,37 +174,50 @@ namespace StaffGenerator.Render
         #region Public
 
         /// <summary>
-        /// スタフ画像を描画
+        /// スタフ画像を描画（分割対応）
         /// </summary>
-        /// <param name="stations">駅リスト</param>
-        /// <returns>描画済みBitmap</returns>
-        public Bitmap Render(StaffTrain train)
+        /// <param name="train">列車情報</param>
+        /// <returns>描画済みBitmapリスト（分割時は複数）</returns>
+        public List<Bitmap> Render(StaffTrain train)
         {
+            var segments = SplitSegments(train.StaffStations, 1, SplitCandidateNames);
+            var result = new List<Bitmap>();
 
+            for (int i = 0; i < segments.Count; i++)
+            {
+                result.Add(RenderSingle(train, segments[i], i + 1, segments.Count));
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 単一セグメントを描画
+        /// </summary>
+        /// <param name="train">列車情報（ヘッダ用）</param>
+        /// <param name="stations">描画対象駅リスト</param>
+        /// <param name="pageNum">このスタフの枚数（1始まり）</param>
+        /// <param name="totalPages">総枚数</param>
+        /// <returns>描画済みBitmap</returns>
+        private Bitmap RenderSingle(
+            StaffTrain train,
+            List<StaffStation> stations,
+            int pageNum,
+            int totalPages)
+        {
             Bitmap bmp = new Bitmap(_templateBitmap);
-
             using Graphics g = Graphics.FromImage(bmp);
 
             InitializeGraphics(g);
-
-            List<StaffStationLayout> layouts =
-                Measure(train.StaffStations);
-
             DrawBackground(g);
+            DrawTrainHeader(g, train, pageNum, totalPages);
 
-            DrawTrainHeader(g, train);
+            var layouts = Measure(stations);
 
-            for (int i = 0; i < train.StaffStations.Count; i++)
+            for (int i = 0; i < stations.Count; i++)
             {
-                DrawStation(
-                    g,
-                    train.TrainTypeImgName,
-                    train.StaffStations[i],
-                    layouts[i],
-                    i,
-                    train.StaffStations.Count);
+                DrawStation(g, train.TrainTypeImgName, stations[i], layouts[i], i, stations.Count);
             }
-
 
             return bmp;
         }
@@ -371,41 +389,137 @@ namespace StaffGenerator.Render
         /// <param name="train">列車情報</param>
         private void DrawTrainHeader(
             Graphics g,
-            StaffTrain train)
+            StaffTrain train,
+            int pageNum,
+            int totalPages)
         {
             SetTextRenderMode(g);
 
+            StringFormat sfl = new StringFormat
+            {
+                Alignment = StringAlignment.Near,
+                LineAlignment = StringAlignment.Near,
+            };
+
+            StringFormat sfr = new StringFormat
+            {
+                Alignment = StringAlignment.Far,
+                LineAlignment = StringAlignment.Near,
+            };
+            // 列車区
+            g.DrawString(
+                "大道寺列車区",
+                _fontHeader,
+                _textBrush,
+                new RectangleF(
+                    45,
+                    80,
+                    110,
+                    30),
+                sfl);
+
             // 列車番号
+            g.DrawString(
+                "列車番号",
+                _fontHeader,
+                _textBrush,
+                new RectangleF(
+                    40,
+                    130,
+                    110,
+                    30),
+                sfr);
+
             g.DrawString(
                 train.TrainName,
                 _fontHeader,
                 _textBrush,
-                166,
-                132);
+                new RectangleF(
+                    166,
+                    130,
+                    150,
+                    30),
+                sfl);
 
-            // 種別
+            // 種別       
+            g.DrawString(
+                "種別",
+                _fontHeader,
+                _textBrush,
+                new RectangleF(
+                    40,
+                    155,
+                    110,
+                    30),
+                sfr);
+
             g.DrawString(
                 train.TrainType,
                 _fontHeader,
                 _textBrush,
-                166,
-                158);
+                new RectangleF(
+                    166,
+                    155,
+                    150,
+                    30),
+                sfl);
 
-            // 行先
+            // 行先      
+            g.DrawString(
+                "行先",
+                _fontHeader,
+                _textBrush,
+                new RectangleF(
+                    40,
+                    180,
+                    110,
+                    30),
+                sfr);
+
             g.DrawString(
                 train.TrainDestination,
                 _fontHeader,
                 _textBrush,
-                166,
-                184);
+                new RectangleF(
+                    166,
+                    180,
+                    150,
+                    30),
+                sfl);
 
-            // 備考
+            // 備考    
+            g.DrawString(
+                "備考",
+                _fontHeader,
+                _textBrush,
+                new RectangleF(
+                    40,
+                    205,
+                    110,
+                    30),
+                sfr);
+
             g.DrawString(
                 train.TrainNote,
                 _fontHeader,
                 _textBrush,
-                166,
-                210);
+                new RectangleF(
+                    166,
+                    205,
+                    150,
+                    90),
+                sfl);
+
+            // 複数枚のとき枚数を表示
+            if (totalPages > 1)
+            {
+                g.DrawString(
+                    $"（{pageNum}/{totalPages}枚目）",
+                    _fontNote,
+                    _textBrush,
+                    255,
+                    85);
+            }
 
             DrawTrainTypeImage(g, train);
         }
@@ -445,6 +559,13 @@ namespace StaffGenerator.Render
             int index,
             int count)
         {
+            // 継続マーカーはテキストのみ描画
+            if (station.StopType == StopType.SplitContinuation)
+            {
+                DrawContinuationMarker(g, station, layout);
+                return;
+            }
+
             if (!(station.StopType == StopType.Pass && !station.IsTimingPoint))
             {
                 DrawStationName(g, trainClass, station, layout);
@@ -457,6 +578,32 @@ namespace StaffGenerator.Render
             }
 
             DrawBorder(g, layout);
+        }
+
+        /// <summary>
+        /// 継続マーカー行を描画
+        /// </summary>
+        private void DrawContinuationMarker(
+            Graphics g,
+            StaffStation station,
+            StaffStationLayout layout)
+        {
+            SetTextRenderMode(g);
+            StringFormat sf = new StringFormat
+            {
+                Alignment = StringAlignment.Center,
+                LineAlignment = StringAlignment.Center,
+            };
+            g.DrawString(
+                station.DisplayName,
+                _fontTime,
+                _textBrush,
+                new RectangleF(
+                    LEFT_X + layout.XOffset,
+                    layout.Top + 5,
+                    RIGHT_X - LEFT_X,
+                    layout.Bottom - layout.Top),
+                sf);
         }
 
         /// <summary>
@@ -752,6 +899,13 @@ namespace StaffGenerator.Render
 
             g.DrawLine(
                 _linePen,
+                LEFT_X + layout.XOffset,
+                layout.Top,
+                RIGHT_X + layout.XOffset,
+                layout.Top);
+
+            g.DrawLine(
+                _linePen,
                 LEFT_X + layout.XOffset + 114,
                 layout.Top,
                 LEFT_X + layout.XOffset + 114,
@@ -802,6 +956,77 @@ namespace StaffGenerator.Render
         #region Utility
 
         /// <summary>
+        /// 駅リストを必要に応じて分割して返す（再帰）
+        /// </summary>
+        /// <param name="stations">対象駅リスト</param>
+        /// <param name="pageNum">現在のスタフ枚数（1始まり）</param>
+        /// <param name="candidates">残りの分割候補駅名</param>
+        /// <returns>分割済みセグメントリスト</returns>
+        private List<List<StaffStation>> SplitSegments(
+            List<StaffStation> stations,
+            int pageNum,
+            IReadOnlyList<string> candidates)
+        {
+            // 2ページ以内に収まるなら分割不要
+            if (MeasureMaxPage(stations) <= 1)
+                return [stations];
+
+            foreach (var candidateName in candidates)
+            {
+                int splitIdx = stations.FindIndex(s =>
+                    s.DisplayName == candidateName &&
+                    s.StopType != StopType.SplitContinuation);
+
+                if (splitIdx < 0) continue;
+
+                var front = stations.Take(splitIdx).ToList();
+                front.Add(stations[splitIdx]);
+                front.Add(CreateContinuationMarker($"▼（{pageNum + 1}枚目へ続く）▼"));
+
+                var back = new List<StaffStation>();
+                back.Add(CreateContinuationMarker($"▼（{pageNum}枚目から続き）▼"));
+                back.Add(stations[splitIdx]);
+                back.AddRange(stations.Skip(splitIdx + 1));
+
+                // 後側がまだ溢れる場合は残り候補で再帰
+                var remainingCandidates = candidates
+                    .SkipWhile(c => c != candidateName)
+                    .Skip(1)
+                    .ToList();
+
+                var backSegments = SplitSegments(back, pageNum + 1, remainingCandidates);
+
+                // 前側も念のため確認（収まらなければそのまま返す）
+                return [front, .. backSegments];
+            }
+
+            // 候補が見つからない・使い果たした場合はそのまま返す
+            return [stations];
+        }
+
+        /// <summary>
+        /// 指定ページ数を超えるか（0始まりのPageIndex最大値を返す）
+        /// </summary>
+        private int MeasureMaxPage(List<StaffStation> stations)
+        {
+            var layouts = Measure(stations);
+            return layouts.Count > 0 ? layouts.Max(l => l.PageIndex) : 0;
+        }
+
+        /// <summary>
+        /// 分割継続マーカー駅を生成
+        /// </summary>
+        /// <param name="text">表示テキスト</param>
+        private static StaffStation CreateContinuationMarker(string text) => new()
+        {
+            DisplayName = text,
+            StopType = StopType.SplitContinuation,
+            IsTimingPoint = false,
+            TrackNumber = "0",
+            Note = "",
+        };
+
+        /// <summary>
         /// 標準行高さ取得
         /// </summary>
         /// <param name="station">駅情報</param>
@@ -809,6 +1034,10 @@ namespace StaffGenerator.Render
         private int GetRowHeight(StaffStation station)
         {
             // Todo: 備考による上限超え対応
+            if (station.StopType == StopType.SplitContinuation)
+            {
+                return ROW_HEIGHT_SMALL;
+            }
 
             if (station.StopType == StopType.Pass)
             {

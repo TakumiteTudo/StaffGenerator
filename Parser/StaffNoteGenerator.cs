@@ -106,8 +106,8 @@ namespace StaffGenerator.Parser
         // ─────────────────────────────
 
         private static List<GeneralConnectionPair> ExtractGeneralConnectionPairs(
-    List<StaffTrain> trains,
-    Dictionary<string, List<StationEntry>> idx)
+            List<StaffTrain> trains,
+            Dictionary<string, List<StationEntry>> idx)
         {
             var candidates = new List<GeneralConnectionPair>();
 
@@ -181,6 +181,7 @@ namespace StaffGenerator.Parser
                     }
 
                     // 通過カバー接続：一般優等列車が途中で通過駅を持つ場合
+                    // 通過カバー接続：一般優等列車が途中で通過駅を持つ場合
                     if (hasSkip && !isTerminal)
                     {
                         var uncovered = new HashSet<string>(skippedStationIDs);
@@ -190,26 +191,32 @@ namespace StaffGenerator.Parser
                                 .Where(id => StopsAtStation(conn.Train, conn.Station.StationID, id))
                                 .ToList();
 
-                            bool isFirst = !candidates.Any(p =>
-                                p.ArrivalTrain == self &&
-                                p.ArrivalStation == sta &&
-                                p.ConnectionType == ConnectionType.SkipCover);
-
-                            if (isFirst || covered.Any(id => uncovered.Contains(id)))
+                            // 修正：通過駅を1つ以上カバーする場合のみ追加（isFirst無条件追加を廃止）
+                            if (covered.Any(id => uncovered.Contains(id)))
                             {
                                 candidates.Add(new GeneralConnectionPair(
                                     self, sta, conn.Train, conn.Station,
                                     ConnectionType.SkipCover));
                                 foreach (var id in covered) uncovered.Remove(id);
                             }
+
                             if (uncovered.Count == 0) break;
                         }
                     }
                 }
             }
 
+            // Terminal のみ重複除去フィルタを適用
+            var terminalCandidates = candidates
+                .Where(p => p.ConnectionType == ConnectionType.Terminal)
+                .ToList();
+
+            var skipCoverCandidates = candidates
+                .Where(p => p.ConnectionType == ConnectionType.SkipCover)
+                .ToList();
+
             // 同一出発列車・駅に対して最も遅い到着を残す
-            var filtered = candidates
+            var filtered = terminalCandidates
                 .GroupBy(p => (p.DepartureTrain, p.DepartureStation.StationID))
                 .Select(g => g.OrderByDescending(p => p.ArrivalStation.ArrivalTime).First())
                 .ToList();
@@ -225,7 +232,8 @@ namespace StaffGenerator.Parser
                 .Select(g => g.OrderBy(p => p.DepartureStation.DepartureTime).First())
                 .ToList();
 
-            return ApplyMultiDepartureFilter(filtered, idx);
+            // SkipCover はフィルタせずそのまま合流
+            return ApplyMultiDepartureFilter([.. filtered, .. skipCoverCandidates], idx);
         }
 
         private static List<ToExpressPair> ExtractToExpressPairs(
@@ -463,22 +471,36 @@ namespace StaffGenerator.Parser
         }
 
         private static void CollectGeneralConnectionNotes(
-            List<GeneralConnectionPair> pairs,
-            StaffNoteAbbreviationTable abbr,
-            List<PendingNote> notes)
+    List<GeneralConnectionPair> pairs,
+    StaffNoteAbbreviationTable abbr,
+    List<PendingNote> notes)
         {
             foreach (var p in pairs)
             {
                 var prefix = ConnectionPrefix(p.ArrivalStation, p.DepartureStation);
+                bool isConnection = prefix == "(接)";
+                bool isTerminal = p.ConnectionType == ConnectionType.Terminal;
+                bool isFirstStop = IsFirstStopStation(p.DepartureTrain, p.DepartureStation);
 
-                // 前列車（到着側）：相手の発時刻を記載
+                // 前列車（到着側）：相手の発時刻で常に記載
                 var depInfo = FormatOtherTrainInfo(p.DepartureTrain, p.DepartureStation, TimeType.Departure, abbr);
                 if (depInfo is not null && p.DepartureStation.DepartureTime is TimeSpan depTime)
                     notes.Add(new PendingNote(p.ArrivalStation, depTime, $"{prefix}{depInfo}"));
 
-                // 後列車（出発側）：連絡の場合は営業始発駅のみ記載
-                if (prefix == "(連)" && !IsFirstStopStation(p.DepartureTrain, p.DepartureStation) && p.ConnectionType == ConnectionType.Terminal)
-                    continue;
+                // 後列車（出発側）：条件分岐
+                bool shouldAddNext = (isConnection, isTerminal) switch
+                {
+                    // ①A 接続・終点連絡：無条件記載
+                    (true, true) => true,
+                    // ①B 接続・通過連絡：営業始発駅を除き記載
+                    (true, false) => !isFirstStop,
+                    // ②A 連絡・終点連絡：営業始発駅のみ記載
+                    (false, true) => isFirstStop,
+                    // ②B 連絡・通過連絡：記載しない
+                    (false, false) => false,
+                };
+
+                if (!shouldAddNext) continue;
 
                 var arrInfo = FormatOtherTrainInfo(p.ArrivalTrain, p.ArrivalStation, TimeType.Arrival, abbr);
                 if (arrInfo is not null && p.ArrivalStation.ArrivalTime is TimeSpan arrTime)
