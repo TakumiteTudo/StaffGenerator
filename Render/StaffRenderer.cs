@@ -63,6 +63,11 @@ namespace StaffGenerator.Render
         /// </summary>
         private const int ROW_HEIGHT_EMPTY = 5;
 
+        /// <summary>
+        /// 種別変更スクリプトのプレフィックス
+        /// </summary>
+        private const string ScriptPrefixChangeClass = "ChangeClass:";
+
         #endregion
 
         #region フィールド
@@ -122,6 +127,15 @@ namespace StaffGenerator.Render
         /// </summary>
         private static readonly string[] SplitCandidateNames = ["大道寺", "赤山町"];
 
+        /// <summary>
+        /// script変更指示のパース結果
+        /// </summary>
+        private record ScriptChangeResult(
+            /// <summary>新種別名（ChangeClass未指定時はnull）</summary>
+            string? NewTrainType,
+            /// <summary>新列番（ChangeName未指定時はnull）</summary>
+            string? NewTrainName);
+
         #endregion
 
         #region コンストラクタ
@@ -174,18 +188,41 @@ namespace StaffGenerator.Render
         #region Public
 
         /// <summary>
-        /// スタフ画像を描画（分割対応）
+        /// スタフ画像を描画（種別変更・溢れ分割対応）
         /// </summary>
         /// <param name="train">列車情報</param>
-        /// <returns>描画済みBitmapリスト（分割時は複数）</returns>
-        public List<Bitmap> Render(StaffTrain train)
+        /// <param name="allTrains">全列車リスト（前列車検索用）</param>
+        /// <returns>描画済みBitmapリスト</returns>
+        public List<Bitmap> Render(StaffTrain train, IReadOnlyList<StaffTrain> allTrains)
         {
-            var segments = SplitSegments(train.StaffStations, 1, SplitCandidateNames);
+            // 大路駅フィルタ適用
+            var filteredTrain = FilterOmizuStation(train, allTrains);
+
+            // 種別変更で分割 → 各セグメントを溢れ分割 → 全rawセグメントを確定
+            var rawSegments = new List<(StaffTrain Header, List<StaffStation> Stations)>();
+            foreach (var (header, stations) in SplitByClassChange(filteredTrain))
+            {
+                foreach (var ov in SplitSegments(stations, SplitCandidateNames))
+                    rawSegments.Add((header, ov));
+            }
+
+            int total = rawSegments.Count;
             var result = new List<Bitmap>();
 
-            for (int i = 0; i < segments.Count; i++)
+            for (int i = 0; i < total; i++)
             {
-                result.Add(RenderSingle(train, segments[i], i + 1, segments.Count));
+                var (header, rawStations) = rawSegments[i];
+                var stations = new List<StaffStation>(rawStations);
+
+                // 先頭に「続き」マーカー挿入（2枚目以降）
+                if (i > 0)
+                    stations.Insert(0, CreateContinuationMarker($"▼（{i}枚目から続き）▼"));
+
+                // 末尾に「続く」マーカー挿入（最終枚以外）
+                if (i < total - 1)
+                    stations.Add(CreateContinuationMarker($"▼（{i + 2}枚目へ続く）▼"));
+
+                result.Add(RenderSingle(header, stations, i + 1, total));
             }
 
             return result;
@@ -954,21 +991,166 @@ namespace StaffGenerator.Render
         #endregion
 
         #region Utility
+        /// <summary>
+        /// 大路駅フィルタ処理
+        /// 上り：行先が"大路"でないとき大路駅を削除
+        /// 下り：前列車の行先が"大路"でないとき大路駅を削除
+        /// </summary>
+        /// <param name="train">列車情報</param>
+        /// <param name="allTrains">全列車リスト</param>
+        /// <returns>フィルタ済み列車情報</returns>
+        private static StaffTrain FilterOmizuStation(
+            StaffTrain train,
+            IReadOnlyList<StaffTrain> allTrains)
+        {
+            bool shouldRemove;
+
+            if (train.IsDownward)
+            {
+                // 下り：前列車を列番で検索し、行先が"大路"でないとき削除
+                var prev = allTrains.FirstOrDefault(t =>
+                    t.TrainName == train.PreviousTrainNumber);
+                shouldRemove = prev != null && prev.TrainDestination != "大路";
+            }
+            else
+            {
+                // 上り：自列車の行先が"大路"でないとき削除
+                shouldRemove = train.TrainDestination != "大路";
+            }
+
+            if (!shouldRemove) return train;
+
+            var filteredStations = train.StaffStations
+                .Where(s => s.DisplayName != "大路")
+                .ToList();
+
+            return CloneTrainWithStations(train, filteredStations);
+        }
 
         /// <summary>
-        /// 駅リストを必要に応じて分割して返す（再帰）
+        /// 列車情報を駅リストのみ変更してクローン
+        /// </summary>
+        /// <param name="src">元列車情報</param>
+        /// <param name="stations">新駅リスト</param>
+        /// <returns>クローン列車情報</returns>
+        private static StaffTrain CloneTrainWithStations(
+            StaffTrain src,
+            List<StaffStation> stations) => new()
+            {
+                TrainName = src.TrainName,
+                TrainType = src.TrainType,
+                TrainTypeImgName = src.TrainTypeImgName,
+                TrainDestination = src.TrainDestination,
+                TrainNote = src.TrainNote,
+                IsDownward = src.IsDownward,
+                StaffStations = stations,
+            };
+
+        /// <summary>
+        /// 種別変更scriptに基づいてセグメント分割
+        /// </summary>
+        /// <param name="train">列車情報</param>
+        /// <returns>（ヘッダー, 駅リスト）のセグメントリスト</returns>
+        private static List<(StaffTrain Header, List<StaffStation> Stations)> SplitByClassChange(
+            StaffTrain train)
+        {
+            var result = new List<(StaffTrain, List<StaffStation>)>();
+            var currentHeader = train;
+            var currentStations = new List<StaffStation>();
+
+            foreach (var sta in train.StaffStations)
+            {
+                var change = ParseScriptChanges(sta);
+
+                if (change != null && currentStations.Count > 0)
+                {
+                    currentStations.Add(sta);
+                    result.Add((currentHeader, currentStations));
+
+                    currentHeader = CloneTrainWithChanges(train, change);
+                    currentStations = [sta];
+                    continue;
+                }
+
+                currentStations.Add(sta);
+            }
+
+            if (currentStations.Count > 0)
+                result.Add((currentHeader, currentStations));
+
+            return result;
+        }
+
+        /// <summary>
+        /// 駅のscriptからChangeClass・ChangeNameを取得
+        /// </summary>
+        /// <param name="station">対象駅</param>
+        /// <returns>変更指示（どちらも未指定時はnull）</returns>
+        private static ScriptChangeResult? ParseScriptChanges(StaffStation station)
+        {
+            if (string.IsNullOrEmpty(station.Script)) return null;
+
+            string? newTrainType = null;
+            string? newTrainName = null;
+
+            foreach (var line in station.Script.Split('\n'))
+            {
+                if (line.StartsWith("ChangeClass:"))
+                {
+                    var parts = line.Split(':');
+                    if (parts.Length >= 2 && !string.IsNullOrEmpty(parts[1]))
+                        newTrainType = parts[1];
+                }
+                else if (line.StartsWith("ChangeName:"))
+                {
+                    var parts = line.Split(':');
+                    if (parts.Length >= 2 && !string.IsNullOrEmpty(parts[1]))
+                        newTrainName = parts[1];
+                }
+            }
+
+            // どちらも未指定なら変更なし
+            if (newTrainType == null && newTrainName == null) return null;
+
+            return new ScriptChangeResult(newTrainType, newTrainName);
+        }
+
+        /// <summary>
+        /// 列車情報をscript変更指示に基づいてクローン
+        /// </summary>
+        /// <param name="src">元列車情報</param>
+        /// <param name="change">変更指示</param>
+        /// <returns>クローン列車情報</returns>
+        private static StaffTrain CloneTrainWithChanges(
+            StaffTrain src,
+            ScriptChangeResult change) => new()
+            {
+                TrainName = change.NewTrainName ?? src.TrainName,
+                TrainType = change.NewTrainType ?? src.TrainType,
+                TrainTypeImgName = change.NewTrainType ?? src.TrainTypeImgName,
+                TrainDestination = src.TrainDestination,
+                TrainNote = src.TrainNote,
+                IsDownward = src.IsDownward,
+                StaffStations = src.StaffStations,
+            };
+
+        /// <summary>
+        /// 駅リストを必要に応じて分割して返す（マーカーなし・再帰）
         /// </summary>
         /// <param name="stations">対象駅リスト</param>
-        /// <param name="pageNum">現在のスタフ枚数（1始まり）</param>
         /// <param name="candidates">残りの分割候補駅名</param>
         /// <returns>分割済みセグメントリスト</returns>
         private List<List<StaffStation>> SplitSegments(
             List<StaffStation> stations,
-            int pageNum,
             IReadOnlyList<string> candidates)
         {
-            // 2ページ以内に収まるなら分割不要
-            if (MeasureMaxPage(stations) <= 1)
+            // マーカーを前後に仮挿入して測定（実際の描画と同条件で判定）
+            var withMarkers = new List<StaffStation>(stations.Count + 2);
+            withMarkers.Add(CreateContinuationMarker("▼"));
+            withMarkers.AddRange(stations);
+            withMarkers.Add(CreateContinuationMarker("▼"));
+
+            if (MeasureMaxPage(withMarkers) <= 1)
                 return [stations];
 
             foreach (var candidateName in candidates)
@@ -979,28 +1161,17 @@ namespace StaffGenerator.Render
 
                 if (splitIdx < 0) continue;
 
-                var front = stations.Take(splitIdx).ToList();
-                front.Add(stations[splitIdx]);
-                front.Add(CreateContinuationMarker($"▼（{pageNum + 1}枚目へ続く）▼"));
+                var front = stations.Take(splitIdx + 1).ToList();
+                var back = stations.Skip(splitIdx).ToList();
 
-                var back = new List<StaffStation>();
-                back.Add(CreateContinuationMarker($"▼（{pageNum}枚目から続き）▼"));
-                back.Add(stations[splitIdx]);
-                back.AddRange(stations.Skip(splitIdx + 1));
-
-                // 後側がまだ溢れる場合は残り候補で再帰
                 var remainingCandidates = candidates
                     .SkipWhile(c => c != candidateName)
                     .Skip(1)
                     .ToList();
 
-                var backSegments = SplitSegments(back, pageNum + 1, remainingCandidates);
-
-                // 前側も念のため確認（収まらなければそのまま返す）
-                return [front, .. backSegments];
+                return [front, .. SplitSegments(back, remainingCandidates)];
             }
 
-            // 候補が見つからない・使い果たした場合はそのまま返す
             return [stations];
         }
 

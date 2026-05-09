@@ -65,6 +65,8 @@ namespace StaffGenerator.Parser
                 TrainTypeImgName = src.trainClass ?? "",
                 TrainDestination = src.destinationStationName ?? "",
                 TrainNote = src.staffComment,
+                PreviousTrainNumber = src.previousTrainNumber ?? "",
+                NextTrainNumber = src.nextTrainNumber ?? "",
                 IsDownward = isDownward,   // 追加
                 StaffStations = mergedList
                     .Select(s => ConvertStation(s, master, isDownward))
