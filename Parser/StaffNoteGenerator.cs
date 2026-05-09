@@ -13,6 +13,7 @@ namespace StaffGenerator.Parser
         /// <summary>接続の最大時間差（分）</summary>        
         private const int GeneralConnectionMaxMinutes = 30;
         private const int ExpressConnectionMaxMinutes = 30;
+        private const int OvertakeMaxMinutes = 20;
 
         /// <summary>着発時刻のどちらを使うかの指定</summary>
         private enum TimeType
@@ -391,6 +392,7 @@ namespace StaffGenerator.Parser
                         var passTime = e.Station.ArrivalTime ?? e.Station.DepartureTime;
                         if (passTime is not TimeSpan pt) continue;
                         if (pt <= selfArr || pt >= selfDep) continue;
+                        if ((selfDep - pt).TotalMinutes > OvertakeMaxMinutes) continue;
 
                         result.Add(new OvertakePair(self, sta, e.Train, e.Station));
                     }
