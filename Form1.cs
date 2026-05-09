@@ -137,7 +137,7 @@ namespace StaffGenerator
                 return;
 
             var train = _loadedTrains[comboBox1.SelectedIndex];
-            var bitmaps = StaffRenderer.Render(train);
+            var bitmaps = StaffRenderer.Render(train, _loadedTrains);
             SetBitmaps(bitmaps); // 修正：戻り値変更に合わせて
         }
 
@@ -150,13 +150,23 @@ namespace StaffGenerator
                 return;
 
             var train = _loadedTrains[comboBox1.SelectedIndex];
-            var bitmaps = StaffRenderer.Render(train);
+            var bitmaps = StaffRenderer.Render(train, _loadedTrains);
             SetBitmaps(bitmaps); // 修正：戻り値変更に合わせて
         }
 
         private void checkBox1_CheckedChanged(object sender, EventArgs e)
         {
             this.TopMost = checkBox1.Checked;
+        }
+
+        private void button6_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void button7_Click(object sender, EventArgs e)
+        {
+
         }
     }
 }

@@ -38,6 +38,8 @@
             button5 = new Button();
             checkBox1 = new CheckBox();
             labelPage = new Label();
+            button6 = new Button();
+            button7 = new Button();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             SuspendLayout();
             // 
@@ -45,7 +47,7 @@
             // 
             button1.Location = new Point(12, 12);
             button1.Name = "button1";
-            button1.Size = new Size(55, 23);
+            button1.Size = new Size(39, 23);
             button1.TabIndex = 0;
             button1.Text = "前へ";
             button1.UseVisualStyleBackColor = true;
@@ -62,7 +64,7 @@
             // 
             // button2
             // 
-            button2.Location = new Point(214, 12);
+            button2.Location = new Point(183, 13);
             button2.Name = "button2";
             button2.Size = new Size(64, 23);
             button2.TabIndex = 2;
@@ -72,9 +74,9 @@
             // 
             // button3
             // 
-            button3.Location = new Point(73, 12);
+            button3.Location = new Point(57, 12);
             button3.Name = "button3";
-            button3.Size = new Size(55, 23);
+            button3.Size = new Size(39, 23);
             button3.TabIndex = 3;
             button3.Text = "次へ";
             button3.UseVisualStyleBackColor = true;
@@ -82,29 +84,29 @@
             // 
             // button4
             // 
-            button4.Location = new Point(481, 12);
+            button4.Location = new Point(345, 13);
             button4.Name = "button4";
-            button4.Size = new Size(64, 23);
+            button4.Size = new Size(43, 23);
             button4.TabIndex = 4;
-            button4.Text = "列車描画";
+            button4.Text = "描画";
             button4.UseVisualStyleBackColor = true;
             button4.Click += button4_Click;
             // 
             // comboBox1
             // 
             comboBox1.FormattingEnabled = true;
-            comboBox1.Location = new Point(284, 13);
+            comboBox1.Location = new Point(253, 13);
             comboBox1.Name = "comboBox1";
-            comboBox1.Size = new Size(191, 23);
+            comboBox1.Size = new Size(86, 23);
             comboBox1.TabIndex = 5;
             // 
             // button5
             // 
-            button5.Location = new Point(551, 12);
+            button5.Location = new Point(394, 13);
             button5.Name = "button5";
-            button5.Size = new Size(79, 23);
+            button5.Size = new Size(51, 23);
             button5.TabIndex = 6;
-            button5.Text = "列車再描画";
+            button5.Text = "再描画";
             button5.UseVisualStyleBackColor = true;
             button5.Click += button5_Click;
             // 
@@ -122,17 +124,39 @@
             // labelPage
             // 
             labelPage.AutoSize = true;
-            labelPage.Location = new Point(134, 16);
+            labelPage.Location = new Point(102, 16);
             labelPage.Name = "labelPage";
             labelPage.Size = new Size(38, 15);
             labelPage.TabIndex = 8;
             labelPage.Text = "label1";
+            // 
+            // button6
+            // 
+            button6.Location = new Point(496, 12);
+            button6.Name = "button6";
+            button6.Size = new Size(64, 23);
+            button6.TabIndex = 9;
+            button6.Text = "指定描画";
+            button6.UseVisualStyleBackColor = true;
+            button6.Click += button6_Click;
+            // 
+            // button7
+            // 
+            button7.Location = new Point(566, 12);
+            button7.Name = "button7";
+            button7.Size = new Size(64, 23);
+            button7.TabIndex = 10;
+            button7.Text = "全体描画";
+            button7.UseVisualStyleBackColor = true;
+            button7.Click += button7_Click;
             // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(722, 1005);
+            Controls.Add(button7);
+            Controls.Add(button6);
             Controls.Add(labelPage);
             Controls.Add(checkBox1);
             Controls.Add(button5);
@@ -160,5 +184,7 @@
         private Button button5;
         private CheckBox checkBox1;
         private Label labelPage;
+        private Button button6;
+        private Button button7;
     }
 }
