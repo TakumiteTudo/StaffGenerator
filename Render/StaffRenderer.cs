@@ -1010,7 +1010,7 @@ namespace StaffGenerator.Render
                 // 下り：前列車を列番で検索し、行先が"大路"でないとき削除
                 var prev = allTrains.FirstOrDefault(t =>
                     t.TrainName == train.PreviousTrainNumber);
-                shouldRemove = prev != null && prev.TrainDestination != "大路";
+                shouldRemove = prev == null || (prev != null && prev.TrainDestination != "大路");
             }
             else
             {
