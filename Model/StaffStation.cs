@@ -60,6 +60,7 @@ namespace StaffGenerator.Model
         /// 入換表示
         /// </summary>
         public bool IsArrShunting { get; set; }
+
         /// <summary>
         /// 入換表示
         /// </summary>
@@ -69,5 +70,10 @@ namespace StaffGenerator.Model
         /// 制御スクリプト
         /// </summary>
         public string Script { get; set; }
+
+        /// <summary>
+        /// 乗務員交代
+        /// </summary>
+        public bool IsDriverChange { get; set; }
     }
 }

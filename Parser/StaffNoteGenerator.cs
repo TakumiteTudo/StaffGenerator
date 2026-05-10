@@ -39,7 +39,7 @@ namespace StaffGenerator.Parser
         }
 
         private record StationEntry(StaffTrain Train, StaffStation Station, int StaIndex);
-        private record PendingNote(StaffStation Station, TimeSpan Time, string Note);
+        private record PendingNote(StaffStation Station, TimeSpan Time, string Note, StaffTrain? OtherTrain = null);
 
         /// <summary>一般接続ペア</summary>
         private record GeneralConnectionPair(
@@ -100,7 +100,10 @@ namespace StaffGenerator.Parser
             CollectOvertakeNotes(overtakePairs, abbrTable, notes);
 
             foreach (var group in notes.GroupBy(n => n.Station))
-                AppendNote(group.Key, group.OrderBy(n => n.Time).Select(n => n.Note));
+            {
+                var deduped = DeduplicateNotes(group.ToList());
+                AppendNote(group.Key, deduped.OrderBy(n => n.Time).Select(n => n.Note));
+            }
         }
 
         // ─────────────────────────────
@@ -396,6 +399,7 @@ namespace StaffGenerator.Parser
                     {
                         if (e.Train == self) continue;
                         if (e.Train.IsDownward != self.IsDownward) continue;
+                        if (IsTest(e.Train)) continue;
                         if (e.Station.StopType != StopType.Pass) continue;
 
                         var passTime = e.Station.ArrivalTime ?? e.Station.DepartureTime;
@@ -477,7 +481,7 @@ namespace StaffGenerator.Parser
                     : other.Station.ArrivalTime;
                 if (time is null) continue;
 
-                notes.Add(new PendingNote(selfSta, time.Value, $" ×  {info}"));
+                notes.Add(new PendingNote(selfSta, time.Value, $" ×  {info}", other.Train));
             }
         }
 
@@ -496,7 +500,7 @@ namespace StaffGenerator.Parser
                 // 前列車（到着側）：相手の発時刻で常に記載
                 var depInfo = FormatOtherTrainInfo(p.DepartureTrain, p.DepartureStation, TimeType.Departure, abbr);
                 if (depInfo is not null && p.DepartureStation.DepartureTime is TimeSpan depTime)
-                    notes.Add(new PendingNote(p.ArrivalStation, depTime, $"{prefix}{depInfo}"));
+                    notes.Add(new PendingNote(p.ArrivalStation, depTime, $"{prefix}{depInfo}", p.DepartureTrain));
 
                 // 後列車（出発側）：条件分岐
                 bool shouldAddNext = (isConnection, isTerminal) switch
@@ -515,7 +519,7 @@ namespace StaffGenerator.Parser
 
                 var arrInfo = FormatOtherTrainInfo(p.ArrivalTrain, p.ArrivalStation, TimeType.Arrival, abbr);
                 if (arrInfo is not null && p.ArrivalStation.ArrivalTime is TimeSpan arrTime)
-                    notes.Add(new PendingNote(p.DepartureStation, arrTime, $"{prefix}{arrInfo}"));
+                    notes.Add(new PendingNote(p.DepartureStation, arrTime, $"{prefix}{arrInfo}", p.ArrivalTrain));
             }
         }
 
@@ -536,7 +540,7 @@ namespace StaffGenerator.Parser
                 if (depInfo is null) continue;
                 if (p.ExpressStation.DepartureTime is not TimeSpan depTime) continue;
 
-                notes.Add(new PendingNote(p.IncomingStation, depTime, $"{prefix}{depInfo}"));
+                notes.Add(new PendingNote(p.IncomingStation, depTime, $"{prefix}{depInfo}", p.ExpressTrain));
             }
         }
 
@@ -552,15 +556,15 @@ namespace StaffGenerator.Parser
                 if (depInfo is null) continue;
                 if (p.OutgoingStation.DepartureTime is not TimeSpan depTime) continue;
 
-                // 特急側は必ず記載
-                notes.Add(new PendingNote(p.ExpressStation, depTime, $"{prefix}{depInfo}"));
+                // 特急側は必ず記載                                                              
+                notes.Add(new PendingNote(p.ExpressStation, depTime, $"{prefix}{depInfo}", p.OutgoingTrain));
 
                 if (prefix == "(連)") continue;
                 var arrInfo = FormatOtherTrainInfo(p.ExpressTrain, p.ExpressStation, TimeType.Arrival, abbr);
                 if (arrInfo is null) continue;
                 if (p.ExpressStation.ArrivalTime is not TimeSpan arrTime) continue;
 
-                notes.Add(new PendingNote(p.OutgoingStation, arrTime, $"{prefix}{arrInfo}"));
+                notes.Add(new PendingNote(p.OutgoingStation, arrTime, $"{prefix}{arrInfo}", p.ExpressTrain));
             }
         }
 
@@ -577,14 +581,39 @@ namespace StaffGenerator.Parser
                 var time = p.PassingStation.ArrivalTime ?? p.PassingStation.DepartureTime;
                 if (time is null) continue;
 
-                // 待たされる列車側のみ記載
-                notes.Add(new PendingNote(p.WaitingStation, time.Value, $"[待]{info}"));
+                // 待たされる列車側のみ記載                                                  
+                notes.Add(new PendingNote(p.WaitingStation, time.Value, $"[待]{info}", p.PassingTrain));
             }
         }
 
         // ─────────────────────────────
         // ヘルパー
         // ─────────────────────────────
+
+        /// <summary>
+        /// 同一駅・同一相手列車の備考が複数ある場合、発時刻記載を優先して1つに絞る
+        /// </summary>
+        /// <param name="notes">対象備考リスト（同一駅のもの）</param>
+        /// <returns>重複除去済み備考リスト</returns>
+        private static List<PendingNote> DeduplicateNotes(List<PendingNote> notes)
+        {
+            var result = new List<PendingNote>();
+
+            // 相手列車が特定できるものを列車ごとにグループ化して重複除去
+            foreach (var group in notes.Where(n => n.OtherTrain != null).GroupBy(n => n.OtherTrain))
+            {
+                var list = group.ToList();
+
+                // 発時刻記載（"発"を含む）を優先、なければ先頭を採用
+                var preferred = list.FirstOrDefault(n => n.Note.Contains("発")) ?? list[0];
+                result.Add(preferred);
+            }
+
+            // 相手列車不明のもの（交換など）はそのまま追加
+            result.AddRange(notes.Where(n => n.OtherTrain == null));
+
+            return result;
+        }
 
         /// <summary>
         /// 2つの停車駅の停車時間帯に重なりがあるか返す
@@ -609,6 +638,10 @@ namespace StaffGenerator.Parser
         /// <summary>回送・試運転列車かどうかを返す</summary>
         private static bool IsDeadheadOrTest(StaffTrain train)
             => train.TrainType.Contains("回送") || train.TrainType.Contains("試運転");
+
+        /// <summary>試運転列車かどうかを返す</summary>
+        private static bool IsTest(StaffTrain train)
+            => train.TrainType.Contains("試運転");
 
         /// <summary>指定駅における1つ前の同方向特急の到着時刻を返す</summary>
         private static TimeSpan? GetPrevExpressArrival(

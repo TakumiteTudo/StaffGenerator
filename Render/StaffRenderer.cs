@@ -1,15 +1,6 @@
 ﻿using StaffGenerator.Model;
-using System;
-using System.Collections.Generic;
-using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Formats.Asn1;
-using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using System.Windows.Forms;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace StaffGenerator.Render
 {
@@ -63,7 +54,7 @@ namespace StaffGenerator.Render
         /// <summary>
         /// 空行高さ
         /// </summary>
-        private const int ROW_HEIGHT_EMPTY = 5;
+        private const int ROW_HEIGHT_EMPTY = 7;
 
         /// <summary>
         /// 種別変更スクリプトのプレフィックス
@@ -349,7 +340,7 @@ namespace StaffGenerator.Render
                 //
                 // 出発時刻
                 //
-                if (station.DepartureTime.HasValue)
+                if (station.DepartureTime.HasValue && (station.IsTimingPoint || station.StopType != StopType.Pass))
                 {
                     if ((i == stations.Count - 1) && !station.IsDepShunting)
                     {
@@ -1016,7 +1007,7 @@ namespace StaffGenerator.Render
             };
 
             int y = lastLayout.Bottom + 5;
-            int x = LEFT_X + lastLayout.XOffset;
+            int x = LEFT_X + lastLayout.XOffset + 3;
 
             foreach (var line in lines)
             {
@@ -1041,8 +1032,22 @@ namespace StaffGenerator.Render
         {
             var lines = new List<string>();
 
+            var lastSta = train.StaffStations[^1];
+
+            //交代の場合
+            if (lastSta.IsDriverChange)
+            {
+                var depTimeText = "--:--";
+                if (lastSta.DepartureTime is TimeSpan dt)
+                    depTimeText = dt.ToString(@"hh\:mm");
+                var depTailText = (bool)(lastSta.IsArrShunting) ? "入換" : "発";
+
+                lines.Add($"引継：{TrainNumberFormat(train.TrainName)}");
+                lines.Add($"　　　{train.TrainType}　{train.TrainDestination}　行き");
+            }
+
             // 折返列車を列番で検索
-            if (!string.IsNullOrEmpty(train.NextTrainNumber))
+            else if (!string.IsNullOrEmpty(train.NextTrainNumber))
             {
                 var next = allTrains.FirstOrDefault(t => t.TrainName == train.NextTrainNumber);
                 if (next != null)
@@ -1060,6 +1065,17 @@ namespace StaffGenerator.Render
                     lines.Add($"折返：{TrainNumberFormat(train.NextTrainNumber)}");
             }
 
+            //江原　検の場合
+            else if (lastSta.DisplayName == "江原　検")
+            {
+                lines.Add($"引継：構内運転士へ");
+            }
+
+            else
+            {
+                lines.Add($"運用終了：");
+            }
+
 
             return lines;
         }
@@ -1070,7 +1086,8 @@ namespace StaffGenerator.Render
         /// <summary>
         /// 大路駅フィルタ処理
         /// 上り：行先が"大路"でないとき大路駅を削除
-        /// 下り：前列車の行先が"大路"でないとき大路駅を削除
+        /// 下り：前列車の行先が"大路"でないとき大路駅を削除   
+        /// 削除時は"新大路"駅のIsDriverChangeをtrueにする
         /// </summary>
         /// <param name="train">列車情報</param>
         /// <param name="allTrains">全列車リスト</param>
@@ -1099,6 +1116,11 @@ namespace StaffGenerator.Render
             var filteredStations = train.StaffStations
                 .Where(s => s.DisplayName != "大路")
                 .ToList();
+
+            // 大路削除時は新大路のIsDriverChangeをtrueにする
+            var shinOmizu = filteredStations.FirstOrDefault(s => s.DisplayName == "新大路");
+            if (shinOmizu != null)
+                shinOmizu.IsDriverChange = true;
 
             return CloneTrainWithStations(train, filteredStations);
         }
@@ -1337,11 +1359,11 @@ namespace StaffGenerator.Render
                 return 0;
             }
 
-            int r = 0;
+            int r = 2;
 
             if (station.TrackNumber != "0")
             {
-                r += 24;
+                r += 22;
             }
 
             if (station.Note == "")
