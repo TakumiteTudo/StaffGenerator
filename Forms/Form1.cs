@@ -1,7 +1,9 @@
-﻿using StaffGenerator.Model;
+﻿using StaffGenerator.Forms;
+using StaffGenerator.Model;
 using StaffGenerator.Parser;
 using StaffGenerator.Render;
 using System.Security.Cryptography;
+using System.Windows.Forms;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement.Window;
 
 namespace StaffGenerator
@@ -16,6 +18,15 @@ namespace StaffGenerator
 
         List<StaffTrain> _loadedTrains = new();
         int _currentIndex = 0;
+
+        /// <summary>ExportTrain列番リストパス</summary>
+        private const string ExportTrainListPath = "Data/ExportTrain.txt";
+
+        /// <summary>スタフ出力フォルダ（指定列車）</summary>
+        private const string ExportDirTrain = "Staff";
+
+        /// <summary>スタフ出力フォルダ（全列車）</summary>
+        private const string ExportDirAll = "Staff/All";
 
         /// <summary>現在表示中のスタフ画像リスト</summary>
         private List<Bitmap> _currentBitmaps = [];
@@ -42,7 +53,7 @@ namespace StaffGenerator
             comboBox1.Items.Clear();
             foreach (var train in _loadedTrains)
             {
-                comboBox1.Items.Add($"{train.TrainName} {train.TrainType} {train.TrainDestination}行");
+                comboBox1.Items.Add($"{train.TrainName}");
             }
 
             if (comboBox1.Items.Count > 0)
@@ -96,7 +107,7 @@ namespace StaffGenerator
             comboBox1.Items.Clear();
             foreach (var train in _loadedTrains)
             {
-                comboBox1.Items.Add($"{train.TrainName} {train.TrainType} {train.TrainDestination}行");
+                comboBox1.Items.Add($"{train.TrainName}");
             }
 
             if (comboBox1.Items.Count > 0)
@@ -143,6 +154,10 @@ namespace StaffGenerator
 
         private void button5_Click(object sender, EventArgs e)
         {
+            MasterTable = StationMasterTable.LoadFromFile("Data/station_master.json");
+            AbbrTable = StaffNoteAbbreviationTable.LoadFromFile("Data/abbreviation.txt");
+            RouteConfig = RouteConfig.LoadFromFile("Data/route_config.txt");
+
             LoadTrains(_file);
             StaffRenderer = new StaffRenderer("Image/行路表テンプレート.png");
 
@@ -158,15 +173,82 @@ namespace StaffGenerator
         {
             this.TopMost = checkBox1.Checked;
         }
-
-        private void button6_Click(object sender, EventArgs e)
+        /// <summary>
+        /// 指定列車リストのスタフをファイル出力する
+        /// </summary>
+        /// <param name="targets">出力対象列車リスト</param>
+        /// <param name="outputDir">出力フォルダ</param>
+        /// <param name="title">進捗ウィンドウタイトル</param>
+        private void ExportStaffs(List<StaffTrain> targets, string outputDir, string title)
         {
+            Directory.CreateDirectory(outputDir);
 
+            using var progress = new ExportProgressForm(targets.Count, title);
+            progress.Show(this);
+
+            foreach (var train in targets)
+            {
+                var bitmaps = StaffRenderer.Render(train, _loadedTrains);
+                for (int i = 0; i < bitmaps.Count; i++)
+                {
+                    string fileName = i == 0
+                        ? $"{train.TrainName}.png"
+                        : $"{train.TrainName}_{i + 1}.png";
+                    bitmaps[i].Save(Path.Combine(outputDir, fileName),
+                        System.Drawing.Imaging.ImageFormat.Png);
+                }
+                progress.Step(train.TrainName);
+            }
         }
 
+        /// <summary>
+        /// ExportTrain.txtに記載された列番のスタフを出力
+        /// </summary>
+        private void button6_Click(object sender, EventArgs e)
+        {
+            if (!File.Exists(ExportTrainListPath))
+            {
+                MessageBox.Show($"{ExportTrainListPath} が見つかりません。", "エラー",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            var targetNames = File.ReadAllLines(ExportTrainListPath)
+                .Select(l => l.Trim())
+                .Where(l => l.Length > 0)
+                .ToHashSet();
+
+            var targets = _loadedTrains
+                .Where(t => targetNames.Contains(t.TrainName))
+                .ToList();
+
+            if (targets.Count == 0)
+            {
+                MessageBox.Show("出力対象の列車が見つかりませんでした。", "情報",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            ExportStaffs(targets, ExportDirTrain, "スタフ出力中（指定列車）");
+            MessageBox.Show($"{targets.Count} 列車のスタフを出力しました。", "完了",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        /// <summary>
+        /// 全列車のスタフを出力
+        /// </summary>
         private void button7_Click(object sender, EventArgs e)
         {
+            if (_loadedTrains.Count == 0)
+            {
+                MessageBox.Show("列車データが読み込まれていません。", "エラー",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
 
+            ExportStaffs(_loadedTrains, ExportDirAll, "スタフ出力中（全列車）");
+            MessageBox.Show($"{_loadedTrains.Count} 列車のスタフを出力しました。", "完了",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
     }
 }

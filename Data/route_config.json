@@ -1,5 +1,0 @@
-{
-  "singleTrackSectionPairs": [["TH60","TH61"],["TH61","TH62"]],
-  "transferTerminalStationIDs": ["TH60","TH80"],
-  "transferMaxMinutes": 15
-}

@@ -1,4 +1,5 @@
 ﻿using StaffGenerator.Model;
+using System.Diagnostics;
 
 namespace StaffGenerator.Parser
 {
@@ -238,13 +239,14 @@ namespace StaffGenerator.Parser
         }
 
         private static List<ToExpressPair> ExtractToExpressPairs(
-    List<StaffTrain> trains,
-    Dictionary<string, List<StationEntry>> idx)
+            List<StaffTrain> trains,
+            Dictionary<string, List<StationEntry>> idx)
         {
             var result = new List<ToExpressPair>();
 
             foreach (var express in trains.Where(IsExpress))
             {
+                Debug.WriteLine($"☆{express.TrainName}");
                 var stas = express.StaffStations;
                 for (int i = 0; i < stas.Count; i++)
                 {
@@ -254,7 +256,12 @@ namespace StaffGenerator.Parser
                     if (sta.StopType == StopType.OpStop) continue;
                     if (sta.DepartureTime is not TimeSpan expressDep) continue;
 
+                    Debug.WriteLine($"　駅：{sta.DisplayName}");
+
                     var prevExpressArr = GetPrevExpressArrival(express, sta, idx);
+
+                    Debug.WriteLine($"　　一本前：{prevExpressArr:hhmmss}");
+                    Debug.WriteLine($"　　自列車：{expressDep:hhmmss}");
 
                     if (!idx.TryGetValue(sta.StationID, out var entries)) continue;
 
@@ -262,9 +269,9 @@ namespace StaffGenerator.Parser
                     {
                         if (e.Train == express) continue;
                         if (e.Train.IsDownward != express.IsDownward) continue;
-                        if (e.Station.StopType == StopType.Stop) continue;
-                        if (IsDeadheadOrTest(e.Train)) continue;                             // ①
-                        if (e.Train.TrainDestination == express.TrainDestination) continue;  // ②
+                        if (e.Station.StopType != StopType.Stop) continue;
+                        if (IsDeadheadOrTest(e.Train)) continue;
+                        if (express.TrainDestination == sta.DisplayName) continue;
                         if (e.Station.ArrivalTime is not TimeSpan otherArr) continue;
                         if (prevExpressArr.HasValue && otherArr <= prevExpressArr.Value) continue;
                         if (otherArr >= expressDep) continue;
@@ -275,12 +282,14 @@ namespace StaffGenerator.Parser
                 }
             }
 
+            Debug.WriteLine(result.Count);
+
             return result;
         }
 
         private static List<FromExpressPair> ExtractFromExpressPairs(
-    List<StaffTrain> trains,
-    Dictionary<string, List<StationEntry>> idx)
+            List<StaffTrain> trains,
+            Dictionary<string, List<StationEntry>> idx)
         {
             var result = new List<FromExpressPair>();
 
@@ -517,10 +526,12 @@ namespace StaffGenerator.Parser
         {
             foreach (var p in pairs)
             {
-                // 一般列車の営業始発駅では記載しない
-                if (IsFirstStopStation(p.IncomingTrain, p.IncomingStation)) continue;
 
                 var prefix = ConnectionPrefix(p.IncomingStation, p.ExpressStation);
+
+                // 一般列車の営業始発駅では、連絡では記載しない
+                if (prefix == "(連)" && IsFirstStopStation(p.IncomingTrain, p.IncomingStation)) continue;
+
                 var depInfo = FormatOtherTrainInfo(p.ExpressTrain, p.ExpressStation, TimeType.Departure, abbr);
                 if (depInfo is null) continue;
                 if (p.ExpressStation.DepartureTime is not TimeSpan depTime) continue;
@@ -541,8 +552,15 @@ namespace StaffGenerator.Parser
                 if (depInfo is null) continue;
                 if (p.OutgoingStation.DepartureTime is not TimeSpan depTime) continue;
 
-                // 特急側のみ記載
+                // 特急側は必ず記載
                 notes.Add(new PendingNote(p.ExpressStation, depTime, $"{prefix}{depInfo}"));
+
+                if (prefix == "(連)") continue;
+                var arrInfo = FormatOtherTrainInfo(p.ExpressTrain, p.ExpressStation, TimeType.Arrival, abbr);
+                if (arrInfo is null) continue;
+                if (p.ExpressStation.ArrivalTime is not TimeSpan arrTime) continue;
+
+                notes.Add(new PendingNote(p.OutgoingStation, arrTime, $"{prefix}{arrInfo}"));
             }
         }
 
@@ -586,7 +604,7 @@ namespace StaffGenerator.Parser
 
         /// <summary>特急列車かどうかを返す</summary>
         private static bool IsExpress(StaffTrain train)
-            => train.TrainType.Contains("特急");
+            => train.TrainType.Contains("特");
 
         /// <summary>回送・試運転列車かどうかを返す</summary>
         private static bool IsDeadheadOrTest(StaffTrain train)

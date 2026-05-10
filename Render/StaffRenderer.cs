@@ -6,8 +6,10 @@ using System.Drawing.Drawing2D;
 using System.Formats.Asn1;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace StaffGenerator.Render
 {
@@ -108,6 +110,11 @@ namespace StaffGenerator.Render
         private readonly Font _fontNote;
 
         /// <summary>
+        /// 備考フォント
+        /// </summary>
+        private readonly Font _fontFooter;
+
+        /// <summary>
         /// 罫線ペン
         /// </summary>
         private readonly Pen _linePen;
@@ -154,6 +161,7 @@ namespace StaffGenerator.Render
             _fontTime = new Font("Yu Gothic", 14, FontStyle.Bold);
             _fontTimeBig = new Font("Yu Gothic", 18, FontStyle.Bold);
             _fontNote = new Font("Yu Gothic", 8, FontStyle.Bold);
+            _fontFooter = new Font("Yu Gothic", 14, FontStyle.Bold);
 
             _linePen = new Pen(Color.Black, 1);
             _textBrush = Brushes.Black;
@@ -222,7 +230,7 @@ namespace StaffGenerator.Render
                 if (i < total - 1)
                     stations.Add(CreateContinuationMarker($"▼（{i + 2}枚目へ続く）▼"));
 
-                result.Add(RenderSingle(header, stations, i + 1, total));
+                result.Add(RenderSingle(header, stations, allTrains, i + 1, total));
             }
 
             return result;
@@ -239,6 +247,7 @@ namespace StaffGenerator.Render
         private Bitmap RenderSingle(
             StaffTrain train,
             List<StaffStation> stations,
+            IReadOnlyList<StaffTrain> allTrains,
             int pageNum,
             int totalPages)
         {
@@ -255,6 +264,9 @@ namespace StaffGenerator.Render
             {
                 DrawStation(g, train.TrainTypeImgName, stations[i], layouts[i], i, stations.Count);
             }
+
+            if (pageNum == totalPages && layouts.Count > 0)
+                DrawFooter(g, train, layouts[^1], allTrains);
 
             return bmp;
         }
@@ -468,7 +480,7 @@ namespace StaffGenerator.Render
                 sfr);
 
             g.DrawString(
-                train.TrainName,
+                TrainNumberFormat(train.TrainName),
                 _fontHeader,
                 _textBrush,
                 new RectangleF(
@@ -980,12 +992,76 @@ namespace StaffGenerator.Render
         }
 
         /// <summary>
-        /// フッタ描画
+        /// フッタ（折返・備考）描画
         /// </summary>
         /// <param name="g">Graphics</param>
-        private void DrawFooter(Graphics g)
+        /// <param name="train">列車情報</param>
+        /// <param name="lastLayout">最終駅レイアウト</param>
+        /// <param name="allTrains">全列車リスト</param>
+        private void DrawFooter(
+            Graphics g,
+            StaffTrain train,
+            StaffStationLayout lastLayout,
+            IReadOnlyList<StaffTrain> allTrains)
         {
-            // TODO:
+            var lines = BuildFooterLines(train, allTrains);
+            if (lines.Count == 0) return;
+
+            SetTextRenderMode(g);
+
+            StringFormat sf = new()
+            {
+                Alignment = StringAlignment.Near,
+                LineAlignment = StringAlignment.Near,
+            };
+
+            int y = lastLayout.Bottom + 5;
+            int x = LEFT_X + lastLayout.XOffset;
+
+            foreach (var line in lines)
+            {
+                g.DrawString(
+                    line,
+                    _fontFooter,
+                    _textBrush,
+                    new RectangleF(x, y, RIGHT_X - LEFT_X, 23),
+                    sf);
+
+                y += 23;
+            }
+        }
+
+        /// <summary>
+        /// フッタに表示する備考行リストを生成
+        /// </summary>
+        /// <param name="train">列車情報</param>
+        /// <param name="allTrains">全列車リスト（折返列車検索用）</param>
+        /// <returns>表示行リスト</returns>
+        private static List<string> BuildFooterLines(StaffTrain train, IReadOnlyList<StaffTrain> allTrains)
+        {
+            var lines = new List<string>();
+
+            // 折返列車を列番で検索
+            if (!string.IsNullOrEmpty(train.NextTrainNumber))
+            {
+                var next = allTrains.FirstOrDefault(t => t.TrainName == train.NextTrainNumber);
+                if (next != null)
+                {
+                    var first = next.StaffStations.FirstOrDefault();
+                    var depTimeText = "--:--";
+                    if (first?.DepartureTime is TimeSpan dt)
+                        depTimeText = dt.ToString(@"hh\:mm");
+                    var depTailText = (bool)(first?.IsArrShunting) ? "入換" : "発";
+
+                    lines.Add($"折返：{TrainNumberFormat(next.TrainName)}（{depTimeText}{depTailText}）");
+                    lines.Add($"　　　{next.TrainType}　{next.TrainDestination}　行き");
+                }
+                else
+                    lines.Add($"折返：{TrainNumberFormat(train.NextTrainNumber)}");
+            }
+
+
+            return lines;
         }
 
         #endregion
@@ -1037,6 +1113,7 @@ namespace StaffGenerator.Render
             StaffTrain src,
             List<StaffStation> stations) => new()
             {
+                OperationNumber = src.OperationNumber,
                 TrainName = src.TrainName,
                 TrainType = src.TrainType,
                 TrainTypeImgName = src.TrainTypeImgName,
@@ -1044,6 +1121,8 @@ namespace StaffGenerator.Render
                 TrainNote = src.TrainNote,
                 IsDownward = src.IsDownward,
                 StaffStations = stations,
+                PreviousTrainNumber = src.PreviousTrainNumber,
+                NextTrainNumber = src.NextTrainNumber,
             };
 
         /// <summary>
@@ -1125,12 +1204,15 @@ namespace StaffGenerator.Render
             StaffTrain src,
             ScriptChangeResult change) => new()
             {
+                OperationNumber = src.OperationNumber,
                 TrainName = change.NewTrainName ?? src.TrainName,
                 TrainType = change.NewTrainType ?? src.TrainType,
                 TrainTypeImgName = change.NewTrainType ?? src.TrainTypeImgName,
                 TrainDestination = src.TrainDestination,
                 TrainNote = src.TrainNote,
                 IsDownward = src.IsDownward,
+                PreviousTrainNumber = src.PreviousTrainNumber,
+                NextTrainNumber = src.NextTrainNumber,
                 StaffStations = src.StaffStations,
             };
 
@@ -1305,6 +1387,46 @@ namespace StaffGenerator.Render
             // 未定義種別時は白
             //
             return Color.White;
+        }
+
+        /// <summary>
+        /// 列番を整形する（文字が入りうるがない箇所をスペース補完）
+        /// </summary>
+        /// <param name="trainName">元の列番</param>
+        /// <returns>整形済み列番</returns>
+        public static string TrainNumberFormat(string trainName)
+        {
+            Regex TrainNumberRegex = new(
+            @"^(回|臨|臨回|検|試)?([0-9]{3,4})([TS]?[ABCDK]?[XYZ]?)?$",
+            RegexOptions.Compiled);
+
+            var m = TrainNumberRegex.Match(trainName);
+
+            // 規則外の列番はそのまま返す
+            if (!m.Success) return trainName;
+
+            string prefix = m.Groups[1].Value;
+            string number = m.Groups[2].Value;
+            string suffix = m.Groups[3].Value;
+
+            // プレフィックスを最大文字数（2文字：臨回）に合わせて全角スペース補完
+            int prefixPadding = 1 - prefix.Length;
+            string paddedPrefix = new string('　', Math.Max(0, prefixPadding)) + prefix;
+
+            // 番号を最大桁数（4桁）に合わせてスペース補完
+            string paddedNumber = number.PadLeft(4);
+
+            // サフィックスを[TS][ABCDK][XYZ]の各1文字に分解してスペース補完
+            char ts = suffix.FirstOrDefault(c => c is 'T' or 'S');
+            char abcdk = suffix.FirstOrDefault(c => c is 'A' or 'B' or 'C' or 'D' or 'K');
+            char xyz = suffix.FirstOrDefault(c => c is 'X' or 'Y' or 'Z');
+
+            string paddedSuffix =
+                (ts == '\0' ? "" : ts.ToString()) +
+                (abcdk == '\0' ? " " : abcdk.ToString()) +
+                (xyz == '\0' ? " " : xyz.ToString());
+
+            return $"{paddedPrefix}{paddedNumber}{paddedSuffix}";
         }
 
         /// <summary>

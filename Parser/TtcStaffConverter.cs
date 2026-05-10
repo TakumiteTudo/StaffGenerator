@@ -1,11 +1,12 @@
-﻿using System;
+﻿using StaffGenerator.Model;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Encodings.Web;
 using System.Text.Json;
-using StaffGenerator.Model;
+using System.Text.RegularExpressions;
 
 namespace StaffGenerator.Parser
 {
@@ -55,13 +56,22 @@ namespace StaffGenerator.Parser
             var isDownward = ResolveIsDownward(staList);
             var mergedList = MergeShuntingStations(staList);
 
-            //Debug.WriteLine($"{src.trainNumber}");
+            var type = src.trainClass ?? "";
+
+            if (type == "特急")
+            {
+                var match = Regex.Match(src.trainTemplate, @"（([^ ）]+)");
+                if (match.Success)
+                {
+                    type = match.Groups[1].Value;
+                }
+            }
 
             return new StaffTrain
             {
                 OperationNumber = src.operationNumber,
                 TrainName = src.trainNumber ?? "",
-                TrainType = src.trainClass ?? "",
+                TrainType = type,
                 TrainTypeImgName = src.trainClass ?? "",
                 TrainDestination = src.destinationStationName ?? "",
                 TrainNote = src.staffComment,

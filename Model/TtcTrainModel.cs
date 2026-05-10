@@ -17,6 +17,7 @@ namespace StaffGenerator.Model
         public string previousTrainNumber;
         public string nextTrainNumber;
         public string trainClass;
+        public string trainTemplate;
         public string originStationID;
         public string originStationName;
         public string destinationStationID;
