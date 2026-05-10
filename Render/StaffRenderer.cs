@@ -165,20 +165,20 @@ namespace StaffGenerator.Render
                 { "急行", Color.FromArgb(255, 171, 34) },
                 { "快急", Color.FromArgb(222, 116, 255) },
                 { "特急", Color.FromArgb(255, 100, 100) },
-                { "回送", Color.FromArgb(200, 200, 200) },
-                { "試運転", Color.FromArgb(200, 200, 200) },
+                { "回送", Color.FromArgb(220, 220, 220) },
+                { "試運転", Color.FromArgb(220, 220, 220) },
             };
 
             _trainTypeOpColors = new()
             {
-                { "普通", Color.FromArgb(200, 200, 200) },
-                { "準急", Color.FromArgb(200, 200, 200) },
-                { "区急", Color.FromArgb(200, 200, 200) },
-                { "急行", Color.FromArgb(200, 200, 200) },
-                { "快急", Color.FromArgb(200, 200, 200) },
-                { "特急", Color.FromArgb(200, 200, 200) },
-                { "回送", Color.FromArgb(200, 200, 200) },
-                { "試運転", Color.FromArgb(200, 200, 200) },
+                { "普通", Color.FromArgb(190, 190, 190) },
+                { "準急", Color.FromArgb(190, 190, 190) },
+                { "区急", Color.FromArgb(190, 190, 190) },
+                { "急行", Color.FromArgb(190, 190, 190) },
+                { "快急", Color.FromArgb(190, 190, 190) },
+                { "特急", Color.FromArgb(190, 190, 190) },
+                { "回送", Color.FromArgb(190, 190, 190) },
+                { "試運転", Color.FromArgb(190, 190, 190) },
             };
         }
 
@@ -1073,7 +1073,8 @@ namespace StaffGenerator.Render
 
             else
             {
-                lines.Add($"運用終了：");
+                //Todo：翌日運用の記載
+                lines.Add($"滞泊");
             }
 
 
