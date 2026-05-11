@@ -287,7 +287,7 @@ namespace StaffGenerator.Render
                 StaffStation station = stations[i];
 
                 int rowHeight = GetRowHeight(station);
-                if ((i == 0 || i == stations.Count - 1) && !station.IsDepShunting)
+                if ((i == 0 || i == stations.Count - 1) && !station.IsDepShunting && !station.IsArrShunting)
                 {
                     rowHeight = ROW_HEIGHT_SMALL;
                 }
@@ -319,7 +319,7 @@ namespace StaffGenerator.Render
                 //
                 if (station.ArrivalTime.HasValue && station.IsTimingPoint && station.StopType != StopType.Pass)
                 {
-                    if ((i == 0) && !station.IsDepShunting)
+                    if ((i == 0) && !station.IsArrShunting)
                     {
                         layout.IsDrawArrival = false;
                     }
@@ -328,7 +328,7 @@ namespace StaffGenerator.Render
                         layout.IsDrawArrival = true;
                         int hour = station.ArrivalTime.Value.Hours;
 
-                        if (lastHour != hour)
+                        if (lastHour != hour && !station.IsArrShunting)
                         {
                             layout.IsDrawArrivalHours = true;
 
@@ -370,7 +370,8 @@ namespace StaffGenerator.Render
 
         #endregion
 
-        #region Draw
+        #region Draw 
+        #region 共用
 
         /// <summary>
         /// Graphics初期化
@@ -421,7 +422,9 @@ namespace StaffGenerator.Render
         {
             // TODO:
         }
+        #endregion
 
+        #region ヘッダ
         /// <summary>
         /// 列車ヘッダ描画
         /// </summary>
@@ -582,7 +585,9 @@ namespace StaffGenerator.Render
 
             g.DrawImage(bmp, new Rectangle(332, 63, 321, 187));
         }
+        #endregion
 
+        #region 駅
         /// <summary>
         /// 駅描画
         /// </summary>
@@ -779,7 +784,6 @@ namespace StaffGenerator.Render
                 // 入換描画
                 if (station.IsDepShunting)
                 {
-
                     DrawTimeText(
                         g,
                         layout,
@@ -982,6 +986,10 @@ namespace StaffGenerator.Render
                 layout.Bottom);
         }
 
+        #endregion
+
+        #region フッタ
+
         /// <summary>
         /// フッタ（折返・備考）描画
         /// </summary>
@@ -1080,6 +1088,7 @@ namespace StaffGenerator.Render
 
             return lines;
         }
+        #endregion
 
         #endregion
 
