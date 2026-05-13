@@ -2,9 +2,6 @@
 using StaffGenerator.Model;
 using StaffGenerator.Parser;
 using StaffGenerator.Render;
-using System.Security.Cryptography;
-using System.Windows.Forms;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement.Window;
 
 namespace StaffGenerator
 {
@@ -149,7 +146,7 @@ namespace StaffGenerator
 
             var train = _loadedTrains[comboBox1.SelectedIndex];
             var bitmaps = StaffRenderer.Render(train, _loadedTrains);
-            SetBitmaps(bitmaps); // 修正：戻り値変更に合わせて
+            SetBitmaps(bitmaps.Select(r => r.Bitmap).ToList());
         }
 
         private void button5_Click(object sender, EventArgs e)
@@ -166,7 +163,7 @@ namespace StaffGenerator
 
             var train = _loadedTrains[comboBox1.SelectedIndex];
             var bitmaps = StaffRenderer.Render(train, _loadedTrains);
-            SetBitmaps(bitmaps); // 修正：戻り値変更に合わせて
+            SetBitmaps(bitmaps.Select(r => r.Bitmap).ToList());
         }
 
         private void checkBox1_CheckedChanged(object sender, EventArgs e)
@@ -188,14 +185,11 @@ namespace StaffGenerator
 
             foreach (var train in targets)
             {
-                var bitmaps = StaffRenderer.Render(train, _loadedTrains);
-                for (int i = 0; i < bitmaps.Count; i++)
+                var renders = StaffRenderer.Render(train, _loadedTrains);
+                foreach (var (bitmap, fileNameBase) in renders)
                 {
-                    string fileName = i == 0
-                        ? $"{train.TrainName}.png"
-                        : $"{train.TrainName}_{i + 1}.png";
-                    bitmaps[i].Save(Path.Combine(outputDir, fileName),
-                        System.Drawing.Imaging.ImageFormat.Png);
+                    string path = Path.Combine(outputDir, $"{fileNameBase}.png");
+                    bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Png);
                 }
                 progress.Step(train.TrainName);
             }

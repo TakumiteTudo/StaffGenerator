@@ -192,25 +192,33 @@ namespace StaffGenerator.Render
         /// <param name="train">列車情報</param>
         /// <param name="allTrains">全列車リスト（前列車検索用）</param>
         /// <returns>描画済みBitmapリスト</returns>
-        public List<Bitmap> Render(StaffTrain train, IReadOnlyList<StaffTrain> allTrains)
+        public List<(Bitmap Bitmap, string FileNameBase)> Render(StaffTrain train, IReadOnlyList<StaffTrain> allTrains)
         {
             // 大路駅フィルタ適用
             var filteredTrain = FilterOmizuStation(train, allTrains);
 
-            // 種別変更で分割 → 各セグメントを溢れ分割 → 全rawセグメントを確定
-            var rawSegments = new List<(StaffTrain Header, List<StaffStation> Stations)>();
-            foreach (var (header, stations) in SplitByClassChange(filteredTrain))
+            // 種別変更で分割 → 各セグメントを溢れ分割 → 全rawセグメントを確定                                        
+            var rawSegments = new List<(StaffTrain Header, List<StaffStation> Stations, string? SplitStationName)>();
+            foreach (var (header, stations, splitName) in SplitByClassChange(filteredTrain))
             {
-                foreach (var ov in SplitSegments(stations, SplitCandidateNames))
-                    rawSegments.Add((header, ov));
+                var overflows = SplitSegments(stations, SplitCandidateNames);
+                for (int j = 0; j < overflows.Count; j++)
+                {
+                    // 溢れ分割の場合は分割駅（先頭駅）名、種別変更分割はsplitName
+                    string? name = j == 0
+                        ? splitName
+                        : overflows[j].FirstOrDefault(s =>
+                            s.StopType != StopType.SplitContinuation)?.DisplayName;
+                    rawSegments.Add((header, overflows[j], name));
+                }
             }
 
             int total = rawSegments.Count;
-            var result = new List<Bitmap>();
+            var result = new List<(Bitmap, string)>();
 
             for (int i = 0; i < total; i++)
             {
-                var (header, rawStations) = rawSegments[i];
+                var (header, rawStations, splitName) = rawSegments[i];
                 var stations = new List<StaffStation>(rawStations);
 
                 // 先頭に「続き」マーカー挿入（2枚目以降）
@@ -221,7 +229,15 @@ namespace StaffGenerator.Render
                 if (i < total - 1)
                     stations.Add(CreateContinuationMarker($"▼（{i + 2}枚目へ続く）▼"));
 
-                result.Add(RenderSingle(header, stations, allTrains, i + 1, total));
+
+                var bitmap = RenderSingle(header, stations, allTrains, i + 1, total);
+
+                // 1枚目は列番のみ、2枚目以降は分割駅名
+                string fileNameBase = i == 0
+                    ? train.TrainName
+                    : $"{train.TrainName}_{splitName ?? (i + 1).ToString()}";
+
+                result.Add((bitmap, fileNameBase));
             }
 
             return result;
@@ -1162,10 +1178,10 @@ namespace StaffGenerator.Render
         /// </summary>
         /// <param name="train">列車情報</param>
         /// <returns>（ヘッダー, 駅リスト）のセグメントリスト</returns>
-        private static List<(StaffTrain Header, List<StaffStation> Stations)> SplitByClassChange(
+        private static List<(StaffTrain Header, List<StaffStation> Stations, string? SplitStationName)> SplitByClassChange(
             StaffTrain train)
         {
-            var result = new List<(StaffTrain, List<StaffStation>)>();
+            var result = new List<(StaffTrain, List<StaffStation>, string?)>();
             var currentHeader = train;
             var currentStations = new List<StaffStation>();
 
@@ -1176,7 +1192,7 @@ namespace StaffGenerator.Render
                 if (change != null && currentStations.Count > 0)
                 {
                     currentStations.Add(sta);
-                    result.Add((currentHeader, currentStations));
+                    result.Add((currentHeader, currentStations, null)); // 前セグメントは起点なし
 
                     currentHeader = CloneTrainWithChanges(train, change);
                     currentStations = [sta];
@@ -1187,7 +1203,13 @@ namespace StaffGenerator.Render
             }
 
             if (currentStations.Count > 0)
-                result.Add((currentHeader, currentStations));
+            {
+                // 先頭セグメントの起点駅名：種別変更駅（2番目以降の先頭）
+                string? splitName = result.Count > 0
+                    ? currentStations.FirstOrDefault()?.DisplayName
+                    : null;
+                result.Add((currentHeader, currentStations, splitName));
+            }
 
             return result;
         }
@@ -1216,7 +1238,7 @@ namespace StaffGenerator.Render
                 {
                     var parts = line.Split(':');
                     if (parts.Length >= 2 && !string.IsNullOrEmpty(parts[1]))
-                        newTrainName = parts[1];
+                        newTrainName = parts[1].Trim();
                 }
             }
 
@@ -1446,7 +1468,7 @@ namespace StaffGenerator.Render
             string paddedPrefix = new string('　', Math.Max(0, prefixPadding)) + prefix;
 
             // 番号を最大桁数（4桁）に合わせてスペース補完
-            string paddedNumber = number.PadLeft(4);
+            string paddedNumber = number.PadLeft(4, ' ').Replace(" ", "  ");
 
             // サフィックスを[TS][ABCDK][XYZ]の各1文字に分解してスペース補完
             char ts = suffix.FirstOrDefault(c => c is 'T' or 'S');
